@@ -16,3 +16,9 @@ venv/
 # Session scratch
 *.log
 .DS_Store
+
+# Vault — real manuscripts stay local (ADR-0004).
+# Everything under vault/ is ignored EXCEPT the committed
+# example-book fixture that tests and CI run against.
+vault/*
+!vault/example-book/
