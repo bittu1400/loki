@@ -273,9 +273,9 @@ Stated so effort is not spent here.
 Verified before a phase is marked complete in [progress.md](progress.md).
 
 **Phase 1 — vault + config**
-- [ ] `.env` gitignored; `git check-ignore -v .env` confirms
-- [ ] `.env.example` contains no real values
-- [ ] Vault path resolution rejects any path escaping the book root
+- [x] `.env` gitignored; `git check-ignore -v .env` confirms
+- [x] `.env.example` contains no real values
+- [x] Vault path resolution rejects any path escaping the book root
 
 **Phase 2 — providers**
 - [ ] Logger redacts by allowlist; no raw headers or bodies logged

@@ -4,18 +4,19 @@ Single source of truth for project state. Updated at the end of every
 session. The next session must be able to start from this file alone,
 with no conversational context.
 
-**Last updated:** 2026-08-24 · end of Session 1
+**Last updated:** 2026-08-25 · end of Session 2
 
 ---
 
 ## Current state
 
-**Phase 0 (documentation foundation) — ✅ complete.**
-**Phase 1 (vault templates + config loader) — ⬜ not started. Next up.**
+**Phase 0 (documentation foundation) — ✅ complete (Session 1).**
+**Phase 1 (vault templates + config loader) — ✅ complete (Session 2).**
+**Phase 2 (provider layer) — ⬜ next, but see "Blocked / waiting" below.**
 
-No Python code exists yet. The repository contains the build spec, three
-independent model analyses of it, and the documentation set that turns
-those analyses into a buildable plan.
+All five Phase 1 exit criteria were run and passed at end of Session 2
+(see below). Python package exists with working config loader, manifest
+parser, scaffolder, and 30 passing tests.
 
 ---
 
@@ -24,8 +25,8 @@ those analyses into a buildable plan.
 | Phase | Deliverable | Status | Blocked by |
 |---|---|---|---|
 | 0 | Documentation foundation | ✅ complete | — |
-| 1 | Vault templates + config loader + `example-book` fixture | ⬜ next | — |
-| 2 | Provider layer: Gemini, OpenRouter, Groq + retry/fallback/dry-run | ⬜ | OQ-02 to finish |
+| 1 | Vault templates + config loader + `example-book` fixture | ✅ complete | — |
+| 2 | Provider layer: Gemini, OpenRouter, Groq + retry/fallback/dry-run | ⬜ next | OQ-02 to finish; author API keys |
 | 3 | Single-chapter generation + continuation loop | ⬜ | OQ-04 recommended first |
 | 4 | Deterministic style checks | ⬜ | — |
 | 5 | Editorial delta pass + reconciler | ⬜ | **OQ-01 (real vaults only)** |
@@ -34,165 +35,115 @@ those analyses into a buildable plan.
 
 ---
 
-## Session 1 — 2026-08-24
+## Session 2 — 2026-08-25
 
 ### Done
 
-**Audit.** Read `prompt.md` and the three model analyses
-(`opus-4.8-analysis.md`, `gpt-5.6-terra-analysis.md`,
-`gemini-3.7-flash-analysis.md`). Identified their five points of
-consensus, graded each analysis, and found the failure mode shared by all
-three: they audited the architecture and none questioned whether the core
-assumption — that free-tier models produce prose worth reading — holds.
-Fourteen additional findings are recorded in [pitfalls.md](pitfalls.md).
+**Decisions recorded first** (per CLAUDE.md rule), then all five Phase 1
+batches in order, one commit each:
 
-**Scaffolding.**
-- `.gitignore` — excludes `.env`, Python artefacts, and all real vault
-  content except the committed `example-book` fixture
-- `.env.example` — three free-tier providers plus deferred publishing
-  secrets, with per-key acquisition URLs and data-use warnings
-- `.env` — created locally, untracked, awaiting the author's keys
+1. **OQ-03 resolved:** config split confirmed — `models.yaml` routing only,
+   `pipeline.yaml` behaviour only. `PROPOSED` marker removed from specs §10.
+2. **OQ-05.1 resolved:** `example-book` is an invented throwaway story.
+   OQ-05.2 (the real book) stays open until Phase 3 nears.
 
-**Documentation.** Ten documents, committed in four batches:
+| Batch | Delivered | Commit |
+|---|---|---|
+| 1 | `pyproject.toml` (ADR-0002 deps, three console scripts), `uv.lock`, ruff config, full package tree as docstring stubs per architecture §8, smoke tests | feat: project skeleton |
+| 2 | Templates for every specs §1 file inside `src/novel_engine/templates/book/`; delimited sections empty; prompt template slots ordered stable→volatile | feat: vault templates |
+| 3 | `vault/example-book/` — *The Salt Almanac* (tidal-harbour fantasy): 3 characters, 4-chapter manifest (2 written/2 planned), threads T-001 resolved + T-002/T-003 open, author + provisional model facts, 2 chapters with real SHA-256 `generated_hash` values, session audit JSONs incl. a fallback-fired case | feat: example-book fixture |
+| 4 | `core/config.py` (Pydantic v2 models + fail-fast validation), `core/outline.py` (manifest parser + next_target), `core/errors.py`; 21 loader/parser tests incl. seeded failures | feat: config loader |
+| 5 | `vault.py scaffold_book()` + `cli/new_book.py`; refuses overwrite and bad slugs; freshly scaffolded book passes the loader as-is | feat: new-book scaffolder |
 
-| File | Purpose |
-|---|---|
-| [decisions.md](decisions.md) | Fast-scan ledger of settled decisions |
-| [adr.md](adr.md) | ADR-0001…0004 with context, alternatives, consequences |
-| [architecture.md](architecture.md) | Topology, authority model, session flow, context strategy, module layout |
-| [specs.md](specs.md) | Concrete contracts: layouts, formats, schemas, state machine, CLI |
-| [pitfalls.md](pitfalls.md) | Failure catalogue with severity and countermeasures |
-| [threat-model.md](threat-model.md) | Assets, trust boundaries, eight threats, per-phase checklist |
-| [best-practices.md](best-practices.md) | Code, prompt, vault, testing, git, session conventions |
-| [open-questions.md](open-questions.md) | OQ-01…08 with blocking status and recommendations |
-| [progress.md](progress.md) | This file |
-| [CLAUDE.md](CLAUDE.md) | Operating instructions for future sessions |
+### Verified (Phase 1 exit criteria)
 
-### Decisions made
+- [x] `uv sync` succeeds from clean state (verified via `git stash -u`)
+- [x] `uv run pytest` — 30 passed
+- [x] `uv run ruff check .` clean; `ruff format --check` clean
+- [x] `new-book --slug test-book` produces a valid tree; second run exits 1
+      with actionable message
+- [x] Loader validates `example-book`; rejects each seeded malformed case
+      (unknown provider, empty model ID, missing env var ×3, POV not in
+      index, POV without route, missing character file, missing required
+      file, non-kebab filename, bad slug, symlink traversal, duplicate /
+      non-contiguous / illegal-status manifest rows)
+- [x] `git check-ignore`: no `vault/example-book/` path ignored;
+      `vault/real-book/…` still ignored
+- [x] threat-model §6 Phase 1 checklist ticked (all three items)
+- [x] Fail-fast demonstrated end-to-end: loading without keys raises
+      ConfigError naming all three missing vars before any call
 
-Four ADRs, recorded at the moment each was made:
+### Design notes worth keeping
 
-1. **ADR-0001** — v1 is the core pipeline only. Publishing endpoint,
-   Actions cron, and the `new_book.py` interview CLI are deferred.
-2. **ADR-0002** — `uv` + `pyproject.toml` + Pydantic v2 + `ruff` + `pytest`.
-3. **ADR-0003** — one chapter per session, manually triggered.
-4. **ADR-0004** — vault at `vault/<book-slug>/` in-repo; real manuscripts
-   gitignored, `vault/example-book/` committed as the test fixture.
-
-### Deliberate departures from `prompt.md`
-
-Each is documented with rationale at the point of use. Listed here so they
-are not mistaken for oversights:
-
-| Departure | Where |
-|---|---|
-| Previous chapter's final ~500 words injected verbatim, not just summaries | [architecture.md](architecture.md) §5 |
-| Locked facts retrieved by entity, not dumped wholesale | [architecture.md](architecture.md) §5 |
-| `models.yaml` split from `pipeline.yaml`; `auto_publish` moves out of model config | [specs.md](specs.md) §10 |
-| Editorial pass also receives the beat and the POV character sheet | [specs.md](specs.md) §12 |
-| Style measured deterministically in Python, not judged by an LLM | [specs.md](specs.md) §14 |
-| Suggested canon patches written to a file, not printed to stdout | [specs.md](specs.md) §12 |
-| `deepen_queue.md` → `deepen-queue.md` (kebab-case throughout) | [specs.md](specs.md) §1 |
-| Per-book vault layout is authoritative; the root-level layout is void | [specs.md](specs.md) §1 |
-| One chapter per session, not two | ADR-0003 |
-| No `pacing_score` in the editorial schema | [specs.md](specs.md) §12 |
-
-### Verified
-
-- `git check-ignore -v .env` → confirms `.env` is ignored
-- `git status --short` → clean after every commit
-- Five commits, each one task, none pushed
+- `generated_hash` convention: SHA-256 of the body text starting at its
+  first heading (everything after frontmatter, leading blanks stripped).
+  Fixture hashes are recomputed from committed bodies, so the "has the
+  author edited this?" comparison is truthful.
+- Empty YAML documents parse as `{}` so the all-comments template index is
+  valid; an empty index + empty `pov_models` is legal together, and real
+  constraints engage once a manifest names its first POV.
+- Env mapping is injected into `load_book_config(..., env=...)`;
+  dotenv loading remains a CLI concern (Phase 3 wiring).
 
 ### Not done / not attempted
 
-- No Python code, no `pyproject.toml`, no tests — Phase 1 work
-- No vault directory created yet, including `example-book`
-- No API keys present; no provider has been called
+- No provider code, no HTTP calls of any kind (Phase 2)
+- No generation logic, no state machine, no style checks
 - Nothing pushed to any remote
 
 ---
 
 ## Next session — start here
 
-**Goal: complete Phase 1 — vault templates, config loader, and the
-`example-book` fixture.**
+**Goal: start Phase 2 — provider layer (base outcomes, router,
+Gemini/OpenRouter/Groq).**
+
+### Blocked / waiting on the author
+
+Phase 2 can be *started* without these but not *finished*:
+
+1. **API keys** in local `.env` (all three providers).
+2. **OQ-02 verification**: which model IDs are live/free right now, rate
+   limits, max output tokens, structured-output support, and specifically
+   `gemini-2.5-pro` free-tier status. Record findings as dated comments in
+   each book's `config/models.yaml`.
 
 ### Read first
 
 1. This file
 2. [CLAUDE.md](CLAUDE.md) — operating rules
-3. [decisions.md](decisions.md) — what is already settled, do not relitigate
-4. [specs.md](specs.md) §1–10 — the exact formats to implement
-5. [open-questions.md](open-questions.md) — OQ-03 and OQ-05 are in scope
+3. [architecture.md](architecture.md) §6 — provider layer design
+4. [pitfalls.md](pitfalls.md) C1–C5 — the outcome taxonomy is a correctness
+   requirement, not style
+5. [threat-model.md](threat-model.md) §6 Phase 2 checklist
 
-### Ask before starting
-
-- **OQ-03** — confirm the `models.yaml` / `pipeline.yaml` split. Low risk,
-  one-line answer, but it shapes the config loader.
-- **OQ-05.1** — confirm that `example-book` should be an invented throwaway
-  story rather than the author's real one. Recommended: invented.
-
-Ask both together in one batch, with recommendations, before writing code.
-
-### Batches
+### Batches (proposed)
 
 Commit after each batch. Do not push.
 
-**Batch 1 — project skeleton**
-- `pyproject.toml` with the ADR-0002 dependency set, console-script entry
-  points for `write-session` / `new-book` / `check-style`
-- `uv.lock` via `uv sync`
-- `ruff` configuration
-- `src/novel_engine/` package tree per [architecture.md](architecture.md) §8,
-  modules stubbed with docstrings only
-- `tests/` with one smoke test that imports the package
+**Batch 1 — outcome types + abstract provider**
+- Five normalised outcomes as distinct types (`core/errors.py` or
+  `providers/base.py`): success · rate_limited · transient_failure ·
+  permanent_failure · model_unavailable
+- Only the first three are fallback-eligible; encode that in the type, so
+  permanent failure cannot reach the fallback chain by construction
 
-**Batch 2 — vault templates**
-- Blank markdown templates for every file in [specs.md](specs.md) §1, with
-  the delimited sections (`MANIFEST`, `FACTS`, `THREADS`, `QUEUE`) already
-  present and empty
-- `characters/index.yaml` template
-- `config/prompt-template.md` with named slots in the order specified in
-  [best-practices.md](best-practices.md) §2
+**Batch 2 — router with backoff**
+- Fallback chain from `models.yaml`, exponential backoff + jitter +
+  `Retry-After` respect from `pipeline.yaml`
+- Permanent failure aborts the whole chain immediately
 
-**Batch 3 — `example-book` fixture**
-- A complete, realistic, invented book under `vault/example-book/`
-- Manifest with mixed statuses (`written`, `planned`), non-trivial names,
-  at least one resolved thread and one open one, at least one
-  `origin: model` fact alongside `origin: author` facts
-- Two or three short chapters with full frontmatter per
-  [specs.md](specs.md) §3
-- Verify it is actually committed despite the `vault/*` ignore rule:
-  `git check-ignore -v vault/example-book/canon/story-bible.md` must
-  report **no match**
+**Batch 3 — concrete providers**
+- Gemini AI Studio, OpenRouter, Groq via httpx; dry-run path returns the
+  assembled request without sending
+- Tests mock HTTP (no live calls); live verification waits on OQ-02
 
-**Batch 4 — config loader**
-- Pydantic models for `models.yaml` and `pipeline.yaml`
-- Startup validation: providers known, model IDs present, required env vars
-  set, every manifest `pov` resolves to a character in `index.yaml`, all
-  filenames kebab-case, vault paths resolve under the book root
-- Fail fast with actionable messages, before any API call
-- Tests against `vault/example-book/`, including the failure cases
-
-**Batch 5 — `new-book` scaffolder**
-- Creates `vault/<slug>/` from the templates and exits (ADR-0001 — it is a
-  scaffolder, not an interview)
-- Refuses to overwrite an existing book directory
-
-### Phase 1 exit criteria
-
-- [ ] `uv sync` succeeds from a clean checkout
-- [ ] `uv run pytest` passes
-- [ ] `uv run ruff check .` clean
-- [ ] `new-book --slug test-book` produces a valid tree
-- [ ] Config loader validates `example-book` and rejects each seeded
-      malformed case with a clear message
-- [ ] `vault/example-book/` is committed; real vault paths are still ignored
-- [ ] [threat-model.md](threat-model.md) §6 Phase 1 checklist passes
-- [ ] `progress.md` updated for Session 3
+**Batch 4 — audit plumbing**
+- Call records shaped like the fixture's session JSONs (provider, model,
+  outcome, latency, tokens); redact-by-allowlist logger
 
 ### Do not do next session
 
-- Do not call any provider API — that is Phase 2
-- Do not write generation logic — that is Phase 3
-- Do not start Phase 2 because Phase 1 finished early
+- Do not write chapter generation logic — Phase 3
+- Do not run the prose spike yet (OQ-04) unless the author asks; it needs
+  their hand-pasted prompts to be meaningful
