@@ -1,0 +1,26 @@
+# Model routing only (OQ-03). Pipeline behaviour lives in pipeline.yaml.
+#
+# Fixture values: model IDs here are placeholders for tests, NOT verified
+# live slugs (OQ-02). Nothing in this repo has called a provider yet.
+
+pov_models:
+  ovist-rhoam:
+    provider: gemini
+    model: gemini-2.5-flash
+  brannec-tull:
+    provider: groq
+    model: llama-3.3-70b-versatile
+    # verified: never (fixture value, OQ-02)
+
+fallback_chain:
+  - provider: openrouter
+    model: qwen/qwen3-235b-a22b:free
+
+editor_model:
+  primary: { provider: gemini, model: gemini-2.5-pro }
+  fallback: { provider: gemini, model: gemini-2.5-flash }
+
+generation_params:
+  temperature: 0.9
+  top_p: 0.95
+  seed: 20260825 # pinned where the provider supports it; ignored otherwise

@@ -1,0 +1,19 @@
+# Character index — The Salt Almanac.
+# character_id -> file, pov flag, model key (keys into models.yaml pov_models).
+# character_id and file are kebab-case; every manifest `pov` value must
+# resolve to an id here or startup validation fails.
+
+ovist-rhoam:
+  file: ovist-rhoam.md
+  pov: true
+  model: ovist-rhoam
+
+brannec-tull:
+  file: brannec-tull.md
+  pov: true
+  model: brannec-tull
+
+sela-vosk:
+  file: sela-vosk.md
+  pov: false
+  model: brannec-tull

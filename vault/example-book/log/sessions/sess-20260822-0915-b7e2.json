@@ -1,0 +1,43 @@
+{
+  "session_id": "sess-20260822-0915-b7e2",
+  "book_slug": "example-book",
+  "chapter_number": 2,
+  "pov": "brannec-tull",
+  "calls": [
+    {
+      "provider": "groq",
+      "model_id": "llama-3.3-70b-versatile",
+      "outcome": "rate_limited",
+      "latency_ms": 410,
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    {
+      "provider": "openrouter",
+      "model_id": "qwen/qwen3-235b-a22b:free",
+      "outcome": "success",
+      "latency_ms": 14230,
+      "input_tokens": 3010,
+      "output_tokens": 330
+    }
+  ],
+  "fallback_fired": true,
+  "fallback_reason": "rate_limit_on_primary",
+  "continuation_rounds": 0,
+  "style_checks": {
+    "banned_phrase_hits": 0,
+    "sentence_length_mean": 12.9,
+    "sentence_length_stdev": 8.0,
+    "adverb_rate_per_1000": 4.7,
+    "type_token_ratio": 0.64,
+    "dialogue_ratio": 0.0
+  },
+  "editorial_delta": {
+    "facts_added": 4,
+    "threads_opened": 2,
+    "threads_resolved": 1,
+    "queue_items_added": 1,
+    "raw_delta_ref": "sess-20260822-0915-b7e2-patches.md"
+  },
+  "final_phase": "complete"
+}

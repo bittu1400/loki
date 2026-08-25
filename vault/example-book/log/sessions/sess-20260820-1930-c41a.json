@@ -1,0 +1,33 @@
+{
+  "session_id": "sess-20260820-1930-c41a",
+  "book_slug": "example-book",
+  "chapter_number": 1,
+  "pov": "ovist-rhoam",
+  "calls": [
+    {
+      "provider": "gemini",
+      "model_id": "gemini-2.5-flash",
+      "outcome": "success",
+      "latency_ms": 9140,
+      "input_tokens": 2870,
+      "output_tokens": 318
+    }
+  ],
+  "fallback_fired": false,
+  "continuation_rounds": 0,
+  "style_checks": {
+    "banned_phrase_hits": 0,
+    "sentence_length_mean": 13.6,
+    "sentence_length_stdev": 7.1,
+    "adverb_rate_per_1000": 4.9,
+    "type_token_ratio": 0.62,
+    "dialogue_ratio": 0.0
+  },
+  "editorial_delta": {
+    "facts_added": 0,
+    "threads_opened": 1,
+    "queue_items_added": 1,
+    "raw_delta_ref": "sess-20260820-1930-c41a-patches.md"
+  },
+  "final_phase": "complete"
+}
