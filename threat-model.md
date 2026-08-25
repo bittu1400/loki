@@ -285,6 +285,8 @@ Verified before a phase is marked complete in [progress.md](progress.md).
 **Phase 3 — drafting**
 - [ ] Continuation loop is hard-capped
 - [ ] Chapter writes refuse to overwrite without explicit `--force`
+- [ ] All-providers-failed terminal case writes a marked `failed-stub`
+      chapter, manifest stays `planned`, zero API cost (ADR-0005)
 
 **Phase 5 — editorial** *(blocked on OQ-01)*
 - [ ] Delta schema-validated before any write

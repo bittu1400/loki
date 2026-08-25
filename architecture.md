@@ -203,11 +203,13 @@ to prevent.
 
 ## 6. Provider layer
 
-Five providers, one interface (gemini, openrouter, groq, mistral, nvidia —
-built and live-verified in Phase 2; cohere/z.ai/cerebras were evaluated and
-dismissed, see OQ-02). Four of the five share an OpenAI-compatible wire
-format and one parameterised class serves them all. The router normalises
-every response into one of five outcomes:
+Six provider modules, one interface (gemini, openrouter, groq, mistral,
+nvidia, aihubmix — built and live-verified in Phase 2; cohere/z.ai/
+cerebras/github-models/chutes/siliconflow/nanogpt/fireworks/portkey were
+evaluated and dismissed, see OQ-02, decisions.md #11-12; requesty has no
+valid key yet). Five of the six share an OpenAI-compatible wire format and
+one parameterised class serves them all. The router normalises every
+response into one of five outcomes:
 
 | Outcome | Fallback eligible? |
 |---|---|

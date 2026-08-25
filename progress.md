@@ -4,7 +4,7 @@ Single source of truth for project state. Updated at the end of every
 session. The next session must be able to start from this file alone,
 with no conversational context.
 
-**Last updated:** 2026-08-25 · end of Session 3
+**Last updated:** 2026-08-25 · end of Session 4
 
 ---
 
@@ -12,12 +12,16 @@ with no conversational context.
 
 **Phase 0 — ✅ complete.**
 **Phase 1 — ✅ complete (Session 2).**
-**Phase 2 (provider layer) — ✅ complete (Session 3).**
-**Phase 3 (single-chapter generation) — ⬜ next.**
+**Phase 2 — ✅ complete (Session 3), extended in Session 4.**
+**Phase 3 (single-chapter generation) — ⬜ next. Nothing started.**
 
-The provider stack is live-verified: Router → Provider → API produced a
-real generation through the primary route, with audit records captured.
-66 tests pass.
+Provider stack final state after Session 4: six provider modules built;
+routing is **unchanged from Session 3** for drafting
+(openrouter:minimax-m3:free primary, nvidia → groq fallbacks) and
+editorial (gemini flash-lite → mistral-large). The aihubmix fallback slot
+added earlier on Session 4 was **removed again the same day** after its
+free tier proved to be ~10 lifetime requests unrecharged. 67 tests pass,
+ruff clean.
 
 ---
 
@@ -27,7 +31,7 @@ real generation through the primary route, with audit records captured.
 |---|---|---|---|
 | 0 | Documentation foundation | ✅ complete | — |
 | 1 | Vault templates + config loader + `example-book` fixture | ✅ complete | — |
-| 2 | Provider layer: Gemini, OpenRouter, Groq, Mistral, NVIDIA | ✅ complete | — |
+| 2 | Provider layer: Gemini, OpenRouter, Groq, Mistral, NVIDIA (+AiHubMix S4, demoted from routing same day) | ✅ complete | — |
 | 3 | Single-chapter generation + continuation loop | ⬜ next | OQ-04 done; real book still needed before generating for real |
 | 4 | Deterministic style checks | ⬜ | — |
 | 5 | Editorial delta pass + reconciler | ⬜ | **OQ-01 (real vaults only)** |
@@ -36,95 +40,92 @@ real generation through the primary route, with audit records captured.
 
 ---
 
-## Session 3 — 2026-08-25
+## Session 4 — 2026-08-25
 
 ### Done
 
-**OQ-02 and OQ-04 resolved empirically** (two spike rounds + JSON probes,
-all recorded in open-questions.md):
+**Provider roster settled empirically (decisions.md #9–12):**
 
-- Gemini 2.5 family is **closed to new keys** (404). `gemini-3.5-flash-lite`
-  works; `gemini-3.7-flash` was persistently 503 during testing.
-- Prose spike winner: **minimax-m3** (925/1000 words, best voice and
-  continuity). Runner-up: flash-lite (best prose-per-word).
-- minimax-m3 also lives on **NVIDIA NIM directly** — the cross-provider
-  fallback lane that answers the author's stability requirement.
-- Author added keys over the session; final active set in `.env`:
-  gemini · openrouter · groq · mistral · nvidia. Dismissed and commented
-  out with reasons: cohere (thinking-block overhead, 3x overshoot),
-  z.ai (flash-only free tier, overloaded), cerebras (402 despite "free").
-- GitHub Models confirmed retired 2026-07-30 — never configure it.
-
-**Phase 2 built in four batches, one commit each:**
-
-| Batch | Delivered |
+| Provider | Verdict |
 |---|---|
-| 1 | Outcome taxonomy (five frozen dataclasses); fallback eligibility encoded in the type so permanent failures cannot reach the chain |
-| 2 | Router: only RateLimited retries in place (honours Retry-After verbatim, then doubling+jitter); transient/unavailable move down immediately; permanent aborts everything |
-| 3 | Concrete providers: one OpenAI-compat class for openrouter/groq/mistral/nvidia + a Gemini adapter; status→outcome mapping at the boundary incl. Gemini's bad-key-on-400 quirk; public build_payload() for --dry-run |
-| 4 | Audit plumbing: CallRecord shaped like specs §13 `calls` arrays, CallRecorder as the Router's on_attempt subscriber, allowlist-only logging (pitfall C4) |
+| AiHubMix | Built as 6th provider (`providers/aihubmix.py`, live-verified) — then **demoted from routing**: free tier = ~10 lifetime requests unrecharged, then abuse-string responses. Kept only as emergency manual lane. |
+| Requesty | Two keys tried, both rejected; **both start `rqsty-sk-` but real Requesty keys start `rqy_`** (requesty.ai/auth.md). Commented out of `.env` with instructions. Its 12 genuinely $0 models remain interesting IF a valid key ever appears — then run the prose spike on nemotron-3-super-120b-a12b / gemma-4-31b-it before any routing change. |
+| Chutes | Dismissed: real catalog is paid TEE models at llm.chutes.ai (NOT api.chutes.ai); account balance $0. |
+| SiliconFlow | Dismissed: MiniMax-M3 is paid (~$1 starter grant); permanently-$0 list rotated away mid-week (402 / model disabled, verified live). |
+| NanoGPT | Dismissed: zero free models in 628-model catalog, balance $0. |
+| Fireworks | Dismissed: account suspended (billing). |
+| Portkey | Dismissed: paid gateway fronting other providers' keys; redundant with our Router. |
 
-**Live end-to-end smoke test passed:** all five providers constructed from
-env, router walked to the primary route, real generation returned, audit
-records written.
+**OQ-04 spike re-run (author-requested full sweep of new catalogs):**
+identical ch-003 prompt, ~1000-word target, zero-cost models only.
+Best newcomer `gemini-3.7-flash-free` (878 words, good voice, truncated
+ending, invented Brannec's age) — a **draw vs minimax-m3**, so per the
+author's rule routing did not change. Full results table in
+open-questions.md OQ-04. Spike harness: `/tmp/opencode/spike/run_spike.py`
+(ephemeral; methodology documented in open-questions.md).
+
+**NVIDIA NIM key expiry recorded** (pitfalls.md C7 + .env + .env.example):
+NIM keys die ~6 months after creation; sudden nvidia 401s = check calendar
+first.
+
+**ADR-0005 written:** all-providers-failed terminal case → write clearly-
+marked `failed-stub` chapter at zero cost, manifest stays `planned`,
+downstream treats stubs as absent. Implementation is Phase 3 Batch 3 work.
 
 ### Verified
 
-- [x] threat-model §6 Phase 2 checklist ticked (all three items)
-- [x] 66 tests pass; ruff clean
-- [x] Editorial JSON probes: gemini flash-lite (`responseMimeType`) and
-      mistral-large (`json_object`) both emit valid delta JSON on separate
-      quotas from drafting
-- [x] Known parser requirements recorded: minimax wraps JSON in code fences;
-      mistral normalizes character ids to Upper_Snake — both Phase 5 work
-
-### Final routing (recorded in example-book config/models.yaml)
-
-```
-drafting:   ovist-rhoam → openrouter:minimax-m3:free
-            brannec-tull → gemini:gemini-3.5-flash-lite
-            fallbacks: nvidia:minimax-m3 → groq:gpt-oss-120b
-editorial:  gemini:gemini-3.5-flash-lite → mistral:mistral-large-latest
-```
+- [x] 67 tests pass; ruff clean (after every change)
+- [x] aihubmix live generation through our provider class succeeded before
+      its cap exhausted (later confirmed dead same day)
+- [x] Every dismissal above verified against the live API, not docs alone
+- [x] Routing after all changes: drafting minimax-m3 via openrouter →
+      nvidia → groq; editorial gemini flash-lite → mistral-large
 
 ### Not done / not attempted
 
-- No chapter-generation logic (Phase 3), no style checks (Phase 4),
-  no editorial delta schema (Phase 5), no state machine (Phase 6)
+- Phase 3 itself: no context builder, no chapter primitive, no drafting
+  loop, no CLI — nothing started
+- No valid Requesty key (author to supply an `rqy_...` key if desired)
 - Nothing pushed to any remote
 
 ---
 
 ## Next session — start here
 
-**Goal: Phase 3 — single-chapter generation + continuation loop.**
+**Goal: Phase 3 — single-chapter generation + continuation loop.
+Nothing has been started; begin at Batch 1.**
 
 ### Blocked / waiting on the author
 
-Nothing technical. But per ADR-0001/OQ-05.2: **the author's real first
-book is still undefined.** Generation can be built and tested against
-`example-book`, but do not run a real write-session for a real book until
-that conversation happens.
+1. Nothing technical blocks Batches 1–4 against `example-book`.
+2. Per ADR-0001/OQ-05.2: the author's real first book is still undefined.
+   Build and test against `example-book`; do NOT run write-session on a
+   real book until that conversation happens.
+3. Optional, non-blocking: author may supply a real Requesty key
+   (must literally start `rqy_`) → then spike its 12 free models first.
 
 ### Read first
 
 1. This file, CLAUDE.md
-2. [architecture.md](architecture.md) §4 (session flow), §5 (context assembly), §6 (provider layer — updated)
-3. [specs.md](specs.md) §3 (chapter frontmatter), §7–8 (log files), §11 (state machine)
-4. Pitfalls B2 (verbatim tail), B6 (episodic pre-resolution), C5 (length assumption)
+2. decisions.md #9–12 (provider verdicts — do not relitigate)
+3. [architecture.md](architecture.md) §4 (session flow), §5 (context assembly), §6 (provider layer)
+4. [specs.md](specs.md) §3 (chapter frontmatter), §7–8 (log files), §11 (state machine)
+5. Pitfalls B2 (verbatim tail), B6 (episodic pre-resolution), C5 (length assumption), C7 (NVIDIA key expiry)
+6. [adr.md](adr.md) ADR-0005 (failed-stub terminal case — Batch 3 must implement it)
 
 ### What now exists (module map)
 
 ```
 src/novel_engine/
   core/config.py        # BookConfig.load_book_config(vault_root, slug, env) — DONE+TESTED
+                        # KNOWN_PROVIDERS now includes aihubmix
   core/outline.py       # parse_manifest(), next_target() — DONE+TESTED
   core/vault.py         # scaffold_book() only; chapter primitives are Phase 3 work
   core/errors.py        # NovelEngineError, ConfigError
   providers/base.py     # Outcome taxonomy + Provider ABC
-  providers/openai_compat.py  # serves openrouter/groq/mistral/nvidia
+  providers/openai_compat.py  # serves openrouter/groq/mistral/nvidia/aihubmix
   providers/gemini.py   # generateContent adapter
-  providers/{openrouter,groq,mistral,nvidia}.py  # base URLs + build()
+  providers/{openrouter,groq,mistral,nvidia,aihubmix}.py  # base URLs + build()
   providers/router.py   # Router(providers, routes, retry, generation_params, on_attempt=...)
   providers/audit.py    # CallRecord / CallRecorder / allowlist logging
   cli/new_book.py       # WORKING: uv run new-book --slug X [--vault-root D]
@@ -132,12 +133,13 @@ templates/book/         # packaged vault templates (scaffolder source)
 vault/example-book/     # fixture; next planned chapter is ch-003 (ovist-rhoam)
 ```
 
-Env keys live in `.env` (gemini, openrouter, groq, mistral, nvidia active;
-cohere/z.ai/cerebras commented out with reasons). `KNOWN_PROVIDERS` in
-core/config.py maps provider→env var. Live routing truth:
-`vault/example-book/config/models.yaml`.
+Env keys active in `.env`: gemini, openrouter, groq, mistral, nvidia,
+aihubmix (emergency lane only — ~10-request lifetime cap hit; do NOT put
+it back in routing). Dismissed/commented with reasons: cohere, z.ai,
+cerebras, chutes, siliconflow, nanogpt, fireworks, portkey, requesty.
+Routing truth: `vault/example-book/config/models.yaml`.
 
-### Batches (proposed)
+### Batches (proposed — unchanged from Session 3 planning)
 
 Commit after each batch. Do not push.
 
@@ -156,8 +158,8 @@ Commit after each batch. Do not push.
 
 **Batch 2 — outline target + vault chapter primitive**
 - `outline.next_target()` already exists and is tested; wire it
-- **Add a chapter-writing primitive to `core/vault.py`** (the one-writer
-  rule means cli/drafting may not open files for writing): create
+- Add a chapter-writing primitive to `core/vault.py` (the one-writer rule
+  means cli/drafting may not open files for writing): create
   `chapters/chapter-NNN.md` only if it does not exist; refuse overwrite
   unless told otherwise by the caller. Also flip manifest status via the
   MANIFEST section's single permitted mechanical edit (status field only)
@@ -167,12 +169,16 @@ Commit after each batch. Do not push.
 **Batch 3 — drafting loop** (`drafting/generate.py`)
 - Build router from `build_providers(env)` + book's models.yaml routes:
   pov route first, then fallback_chain
-- Measure words vs `target_words ± word_tolerance`; if short,
-  continuation prompt appends the partial draft and asks to continue;
-  hard-capped at `max_continuation_rounds`
+- Measure words vs `target_words ± word_tolerance`; if short, continuation
+  prompt appends the partial draft and asks to continue; hard-capped at
+  `max_continuation_rounds`
 - Frontmatter per specs §3: BOTH `assigned_model` and `actual_model`
   (Success.model_id), `fallback_triggered`, `continuation_rounds`,
   token counts from the outcome, `generated_hash` of body-as-generated
+- **Implement ADR-0005**: when every route is exhausted, still write a
+  clearly-marked failed-stub chapter locally (zero cost, manifest stays
+  `planned`, status `failed-stub`, last error per provider in frontmatter);
+  re-run with `--force` replaces it
 - Word-count reality check (OQ-06/C5): flash-lite undershoots (~78%),
   mistral large badly (~35%) — continuation loop is load-bearing, not
   cosmetic
@@ -197,6 +203,8 @@ Commit after each batch. Do not push.
       plot-outline.md changes (verify with git diff)
 - [ ] Simulated failure: primary route returns RateLimited → fallback fires
       and `fallback_triggered: true` lands in frontmatter (test with fakes)
+- [ ] Simulated total failure: ALL routes fail → failed-stub chapter per
+      ADR-0005, manifest unchanged (test with fakes)
 - [ ] threat-model §6 Phase 3 checklist items pass (hard-capped loop;
       overwrite refusal)
 
@@ -207,4 +215,7 @@ iterate on the prompt with --dry-run first.
 ### Do not do next session
 
 - Do not generate against any real book (none exists yet)
+- Do not re-add aihubmix to routing (cap is lifetime, not daily)
+- Do not chase the dismissed providers (chutes/siliconflow/nanogpt/
+  fireworks/portkey) without NEW evidence; reasons are dated in `.env`
 - Do not start Phase 4 because Phase 3 finished early
