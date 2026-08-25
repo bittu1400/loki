@@ -15,6 +15,8 @@ for "later". If it is not in this file, it was not decided.
 | 4 | 2026-08-24 | Vault lives at `vault/<book-slug>/` in this repo. Real manuscripts are gitignored; a committed `vault/example-book/` fixture serves tests and CI. | [ADR-0004](adr.md#adr-0004--vault-location-and-what-gets-committed) |
 | 5 | 2026-08-25 | Config is split: `models.yaml` for model routing only, `pipeline.yaml` for behaviour (`target_words`, `auto_publish`, etc.). Resolves OQ-03 in favour of the specs.md §9–10 proposal; removes the `PROPOSED` marker there. | — |
 | 6 | 2026-08-25 | `vault/example-book/` fixture is an invented throwaway story, deliberately awkward (odd names, tricky continuity), not the author's real book. Resolves OQ-05.1; OQ-05.2 (the real book) stays open until Phase 3 nears. | — |
+| 7 | 2026-08-25 | Model routing settled after live spikes: drafting primary `openrouter:minimax-m3:free` with `nvidia:minimaxai/minimax-m3` as same-model mirror; `gemini:gemini-3.5-flash-lite` for brannec-tull POV chapters; editorial `gemini flash-lite` → `mistral:mistral-large`. Full table in example-book `config/models.yaml`. | — |
+| 8 | 2026-08-25 | Provider stability principle: every route needs a fallback on a **different provider**, ideally the same model served twice. Provider diversity is a requirement, not an optimisation. Dismissed providers (cohere, z.ai, cerebras, github-models) are commented out of `.env` with reasons and must not be re-added without new evidence. | — |
 
 ## Pending
 

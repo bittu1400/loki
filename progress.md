@@ -109,35 +109,100 @@ that conversation happens.
 ### Read first
 
 1. This file, CLAUDE.md
-2. [architecture.md](architecture.md) §4 (session flow) and §5 (context assembly)
+2. [architecture.md](architecture.md) §4 (session flow), §5 (context assembly), §6 (provider layer — updated)
 3. [specs.md](specs.md) §3 (chapter frontmatter), §7–8 (log files), §11 (state machine)
 4. Pitfalls B2 (verbatim tail), B6 (episodic pre-resolution), C5 (length assumption)
+
+### What now exists (module map)
+
+```
+src/novel_engine/
+  core/config.py        # BookConfig.load_book_config(vault_root, slug, env) — DONE+TESTED
+  core/outline.py       # parse_manifest(), next_target() — DONE+TESTED
+  core/vault.py         # scaffold_book() only; chapter primitives are Phase 3 work
+  core/errors.py        # NovelEngineError, ConfigError
+  providers/base.py     # Outcome taxonomy + Provider ABC
+  providers/openai_compat.py  # serves openrouter/groq/mistral/nvidia
+  providers/gemini.py   # generateContent adapter
+  providers/{openrouter,groq,mistral,nvidia}.py  # base URLs + build()
+  providers/router.py   # Router(providers, routes, retry, generation_params, on_attempt=...)
+  providers/audit.py    # CallRecord / CallRecorder / allowlist logging
+  cli/new_book.py       # WORKING: uv run new-book --slug X [--vault-root D]
+templates/book/         # packaged vault templates (scaffolder source)
+vault/example-book/     # fixture; next planned chapter is ch-003 (ovist-rhoam)
+```
+
+Env keys live in `.env` (gemini, openrouter, groq, mistral, nvidia active;
+cohere/z.ai/cerebras commented out with reasons). `KNOWN_PROVIDERS` in
+core/config.py maps provider→env var. Live routing truth:
+`vault/example-book/config/models.yaml`.
 
 ### Batches (proposed)
 
 Commit after each batch. Do not push.
 
 **Batch 1 — context builder** (`core/context_builder.py`)
-- Assemble the prompt from `config/prompt-template.md` slots in order:
-  style guide, story bible excerpt, POV sheet, locked facts (retrieval by
-  entity from the beat), banned phrases, recent summaries, previous tail
-  (~500 words verbatim), beat + instructions
-- Respect `pipeline.yaml context` budgets
+- Fill `config/prompt-template.md` slots IN FILE ORDER (stable→volatile):
+  `{{style_guide}}`, `{{story_bible}}`, `{{character_sheet}}`,
+  `{{locked_facts}}`, `{{banned_phrases}}`, `{{recent_summaries}}`,
+  `{{previous_tail}}`, `{{pov_character}}`, `{{beat}}`,
+  `{{chapter_instructions}}`
+- Locked facts retrieved by entity: select tracker lines whose category
+  touches the POV id or entities named in the beat; cap at
+  `pipeline.yaml context.max_locked_facts`
+- Previous tail = last `context.previous_chapter_tail_words` words of the
+  highest existing chapter, VERBATIM (pitfall B2)
+- Parse FACTS lines with the line grammar from continuity-tracker.md header
 
-**Batch 2 — outline target selection**
-- Next-target = lowest `planned`; manifest status flip as the sole
-  mechanical edit to plot-outline.md
+**Batch 2 — outline target + vault chapter primitive**
+- `outline.next_target()` already exists and is tested; wire it
+- **Add a chapter-writing primitive to `core/vault.py`** (the one-writer
+  rule means cli/drafting may not open files for writing): create
+  `chapters/chapter-NNN.md` only if it does not exist; refuse overwrite
+  unless told otherwise by the caller. Also flip manifest status via the
+  MANIFEST section's single permitted mechanical edit (status field only)
+- `generated_hash` convention (established Session 2, used by fixture):
+  SHA-256 of everything after frontmatter, leading blank lines stripped
 
 **Batch 3 — drafting loop** (`drafting/generate.py`)
-- Call router; measure words vs `target_words ± word_tolerance`;
-  continuation rounds up to `max_continuation_rounds`
-- Write chapter via vault primitives ONLY; frontmatter per specs §3 with
-  assigned_model AND actual_model, generated_hash of body as generated
-- Refuse overwrite without `--force`
+- Build router from `build_providers(env)` + book's models.yaml routes:
+  pov route first, then fallback_chain
+- Measure words vs `target_words ± word_tolerance`; if short,
+  continuation prompt appends the partial draft and asks to continue;
+  hard-capped at `max_continuation_rounds`
+- Frontmatter per specs §3: BOTH `assigned_model` and `actual_model`
+  (Success.model_id), `fallback_triggered`, `continuation_rounds`,
+  token counts from the outcome, `generated_hash` of body-as-generated
+- Word-count reality check (OQ-06/C5): flash-lite undershoots (~78%),
+  mistral large badly (~35%) — continuation loop is load-bearing, not
+  cosmetic
 
 **Batch 4 — CLI wiring** (`cli/write_session.py`)
-- `--book/--chapter/--dry-run/--force` flags; dotenv loading; rich output
-- Dry-run prints assembled prompt and exits before any call
+- Flags per specs §15: `--book --chapter --dry-run --force`; load dotenv
+  before building providers; rich console output; audit records written to
+  `log/sessions/<id>.json` on real runs
+- Dry-run prints assembled prompt and exits BEFORE any provider call
+
+### Phase 3 exit criteria
+
+- [ ] `uv run pytest` passes; ruff clean (every session)
+- [ ] `write-session --book example-book --dry-run` prints a complete
+      assembled prompt using the template slots and spends nothing
+- [ ] A full real run against `example-book` produces `chapter-003.md`
+      (next planned target, pov ovist-rhoam) with valid frontmatter, hash
+      matching its body, both model fields recorded, and an audit JSON in
+      `log/sessions/`
+- [ ] Second run without `--force` refuses to overwrite chapter-003
+- [ ] Manifest status flips planned→written for ch-003 and nothing else in
+      plot-outline.md changes (verify with git diff)
+- [ ] Simulated failure: primary route returns RateLimited → fallback fires
+      and `fallback_triggered: true` lands in frontmatter (test with fakes)
+- [ ] threat-model §6 Phase 3 checklist items pass (hard-capped loop;
+      overwrite refusal)
+
+Tick only after actually running each item. The real-run item spends 1–4
+requests of the OpenRouter daily cap — do it once, not repeatedly;
+iterate on the prompt with --dry-run first.
 
 ### Do not do next session
 

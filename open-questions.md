@@ -52,11 +52,17 @@ privacy.
 
 ---
 
-## 🔴 OQ-02 — Which free-tier models and IDs actually work right now?
+## ~~🔴 OQ-02 — Which free-tier models and IDs actually work right now?~~ — RESOLVED 2026-08-25
 
-**Blocks:** Phase 2 (provider layer) completion.
-**Owner:** Author — mostly resolved 2026-08-25 by live API probes (listing +
-generation). Remaining unknowns marked below.
+**Resolved by live probes over two rounds** (see findings tables below).
+Every default in specs.md §9 was found dead or wrong; verified routes are
+recorded in `vault/example-book/config/models.yaml` with dated comments,
+and the final routing is in decisions.md #7. Residual unknowns (exact
+per-model daily quotas on this Gemini key, whether `glm-5.2:free`
+recovers, Groq TPM ceilings) do not block anything and are noted at the
+end of this entry.
+
+---
 
 **Verified 2026-08-25** (all three keys valid):
 
@@ -117,14 +123,10 @@ goes wrong. Marked **PROPOSED** in specs.md until confirmed.
 
 ---
 
-## 🟠 OQ-04 — Has the prose spike been run, and what did it show?
+## ~~🟠 OQ-04 — Has the prose spike been run, and what did it show?~~ — RUN 2026-08-25
 
-**Blocks:** the decision to continue at all. Also informs OQ-06.
-**Status:** RUN 2026-08-25. Identical assembled prompt (Salt Almanac ch-003
-beat, full context per best-practices §2) sent to four live free models.
-
-**Raw outputs:** session transcript; not committed (they are experiments,
-not canon).
+**Blocks:** nothing any more — go/no-go answered **provisionally yes**.
+Re-run recommended monthly or whenever a route dies; this roster rots.
 
 **Results, ranked:**
 
@@ -182,18 +184,12 @@ with full frontmatter, and a populated continuity tracker.
 
 ## 🟡 OQ-06 — Is 1000 words the right chapter unit?
 
-**Blocks:** nothing. Revisit after OQ-04.
-
-**The situation.** `prompt.md` specifies ~1000 words. That is a scene rather
-than a chapter, and prose generated at that granularity with a fresh context
-each time tends to arrive pre-resolved and episodic (pitfall B6).
-
-**Scope.** `target_words` is already a `pipeline.yaml` tunable, so nothing
-is locked. The question is what the default should be, and it is answerable
-only with real output in hand.
-
-**Recommendation:** leave at 1000 for now, revisit with OQ-04's chapters on
-the table.
+**Blocks:** nothing. Partially informed by OQ-04 (2026-08-25): only
+minimax-m3 held ~1000 words unaided; flash-lite undershot (781), mistral
+large undershot badly (347), command-a overshot 3×. So 1000 stays the
+default, but `word_tolerance` must be **enforced by the continuation
+loop**, not assumed of any model. Revisit after Phase 3 produces real
+continuation behaviour.
 
 ---
 

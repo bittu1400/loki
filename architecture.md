@@ -203,8 +203,11 @@ to prevent.
 
 ## 6. Provider layer
 
-Three providers, one interface. The router normalises every response into
-one of five outcomes:
+Five providers, one interface (gemini, openrouter, groq, mistral, nvidia —
+built and live-verified in Phase 2; cohere/z.ai/cerebras were evaluated and
+dismissed, see OQ-02). Four of the five share an OpenAI-compatible wire
+format and one parameterised class serves them all. The router normalises
+every response into one of five outcomes:
 
 | Outcome | Fallback eligible? |
 |---|---|
@@ -217,12 +220,20 @@ one of five outcomes:
 The last row is a correctness requirement, not an optimisation. A malformed
 prompt or an invalid editorial response must not trigger a different model
 as if it were a rate limit — that turns a bug into a silent, expensive,
-non-deterministic retry storm across three providers.
+non-deterministic retry storm across providers. In the shipped router the
+policy is sharper still: only RateLimited retries the *same* route (it
+carries `Retry-After`); transient failures and pulled slugs move down the
+chain at once; permanent failure aborts the entire chain.
+
+**Stability principle (decisions.md #8).** Every route needs a fallback on
+a different provider, ideally the same model served twice — minimax-m3 runs
+on both OpenRouter and NVIDIA NIM, so a `:free` slug pull degrades quality
+instead of ending the session.
 
 Three provider-specific realities the layer must absorb:
 
-- **Gemini is not OpenAI-shaped.** Groq and OpenRouter speak an
-  OpenAI-compatible schema; Gemini's native API does not, and system-prompt
+- **Gemini is not OpenAI-shaped.** OpenRouter, Groq, Mistral, and NVIDIA NIM
+  speak an OpenAI-compatible schema; Gemini's native API does not, and system-prompt
   handling differs. The adapter absorbs this; nothing above it knows.
 - **Structured-output support is uneven.** Most OpenRouter `:free` models do
   not reliably honour a JSON schema. This matters precisely when the

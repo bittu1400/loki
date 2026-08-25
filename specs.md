@@ -267,6 +267,9 @@ whether to run fresh, resume, or refuse.
 ## 9. `config/models.yaml` — routing only
 
 ```yaml
+# SCHEMA EXAMPLE ONLY — every model ID below is DEAD as of 2026-08-25
+# (verified in OQ-02). Do not copy it. The live, verified routing is:
+#   vault/example-book/config/models.yaml   (dated comments per entry)
 pov_models:
   kaelen: { provider: gemini,     model: gemini-2.5-flash }
   lyra:   { provider: openrouter, model: qwen/qwen3-235b-a22b:free }
@@ -285,12 +288,13 @@ generation_params:
   seed: 20260824        # pinned where the provider supports it; ignored otherwise
 ```
 
-> **Every model ID above is an assumption until verified.** Free-tier
-> availability changes without notice, `:free` slugs are renamed or pulled,
-> and `gemini-2.5-pro`'s free-tier quota is the tightest in the stack while
-> also being the model called every single session. `config.py` validates
-> providers, model IDs, and required environment variables at startup,
-> before any generation begins. Author verification is tracked as OQ-02.
+> **Verified reality (2026-08-25, OQ-02/OQ-04):** the Gemini 2.5 family is
+> closed to new keys; `llama-3.3-70b-versatile` no longer exists; the
+> editorial role runs on `gemini-3.5-flash-lite` → `mistral-large`. Five
+> providers are live (gemini, openrouter, groq, mistral, nvidia); cohere,
+> z.ai, and cerebras were tried and dismissed (reasons in `.env.example`).
+> Free-tier availability changes without notice — re-verify before trusting
+> any ID, and record a dated comment per entry when you do.
 
 **`editor_model` has its own fallback, deliberately.** If drafting succeeds
 but editorial reconciliation fails, the correct behaviour is to keep the
