@@ -21,11 +21,12 @@ pov_models:
 
 fallback_chain: # applies when a pov_model's provider fails or is rate-limited
   - provider: nvidia
-    model: minimaxai/minimax-m3 # same model, independent quota
-  - provider: aihubmix
-    model: minimax-m3-free # third free lane for the same model (added 2026-08-25)
+    model: minimaxai/minimax-m3 # same model, independent quota (key expires ~2027-02, see .env)
   - provider: groq
     model: openai/gpt-oss-120b # fastest; weakest prose = last resort
+# aihubmix REMOVED 2026-08-25: its free tier caps unrecharged accounts at
+# ~10 lifetime requests, then returns an abuse-warning string. Failed the
+# stability condition (open-questions.md OQ-04 re-run; decisions.md #12).
 
 editor_model:
   primary: { provider: gemini, model: gemini-3.5-flash-lite } # valid JSON w/ responseMimeType, verified

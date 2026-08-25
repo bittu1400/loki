@@ -157,6 +157,36 @@ assumed.
 **Recommendation:** assign minimax-m3:free as primary drafting route;
 flash-lite as the fast fallback. Re-verify monthly — this roster will rot.
 
+### Re-run 2026-08-25 — new-provider sweep (partial; blocked by caps)
+
+Author requested a full sweep of every untested model on the new providers
+(aihubmix, chutes, siliconflow). Same assembled ch-003 prompt, ~1000-word
+target. Outcome: **no challenger beats minimax-m3; routing unchanged** —
+and the sweep itself exposed that AiHubMix's free tier is not sustainable.
+
+| Model | Provider | Words | Latency | Verdict |
+|---|---|---|---|---|
+| `gemini-3.7-flash-free` | aihubmix | 878 | 27s | Best of the new batch. Held procedural voice, counting habit, ledger-ear, continuity. Truncated mid-sentence at the end. Invented Brannec's age (mild drift). Under target (-12%). Not clearly better than minimax-m3 → no change. |
+| `gemini-3-flash-preview-free` | aihubmix | 605 | 25s | Decent voice; -40% length; invented a two-clerk rule. Out. |
+| `nemotron-3-super-120b-a12b-free` | aihubmix | 324 | 30s | Severe undershoot (-68%); claimed spring tides are ~14 months apart (false). Out. |
+| `nemotron-3.5-lightning-free` | aihubmix | 1616 | 50s | Leaked chain-of-thought into prose; +62% overshoot. Family pattern confirmed: out. |
+| `gemini-3.6-flash-free` | aihubmix | 76 | 30s | Truncated almost immediately (thinking consumed budget). Untestable at this setting. |
+
+Untested (~20 aihubmix models, all coding/image/tiny/omni variants
+excluded up front): **blocked — see cap finding below.**
+Chutes: real catalog is paid TEE models only; account balance $0 → nothing
+testable at zero cost. SiliconFlow: its permanently-$0 list has rotated away
+(Qwen3-8B → 402 insufficient balance; R1-Distill → model disabled).
+
+**Key finding — AiHubMix free tier is capped at ~10 lifetime requests per
+unrecharged account**, after which every free model returns an abuse-warning
+string instead of prose. Our smoke tests plus this spike exhausted it in one
+day. It therefore fails the author's stability condition for fallback lanes.
+
+**Consequences:** aihubmix demoted out of the drafting fallback chain
+(decisions.md #12); minimax-m3's stable lanes return to openrouter → nvidia.
+Requesty remains the only untested provider, pending a regenerated key.
+
 ---
 
 ## 🟠 OQ-05 — What is the book? (needed for `vault/example-book/`)
