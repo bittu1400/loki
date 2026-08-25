@@ -1,35 +1,33 @@
 # Model routing only (OQ-03). Pipeline behaviour lives in pipeline.yaml.
 #
-# Verification status (2026-08-25, second round — live generation probes):
-# - minimax-m3 confirmed on TWO providers: openrouter AND nvidia (stable
-#   fallback lane; same model, independent quotas).
-# - mistral free tier verified: small + large both generate (~1B tok/mo).
-#   Large resolves scenes early (347 words vs 1000 target) when drafting.
-# - cohere command-a-plus works only with thinking disabled; 3x overshoot.
-# - cerebras: 402 payment required despite "free" listing. Dead for us.
-# - github models: fully retired 2026-07-30. Never add it.
-# - z.ai: flash tier free but overloaded during testing; glm-5.x needs balance.
+# FINAL ROUTING — settled 2026-08-25 after two spike rounds + JSON probes.
+# Every role has its fallback on a DIFFERENT provider. Dismissed this round:
+# cerebras (402 paywall), github models (retired), cohere (thinking overhead,
+# 3x overshoot), z.ai (flash-only tier, overloaded), glm-5.2:free on
+# openrouter (upstream-saturated twice), inkling:free (API-blocked),
+# nemotron-3-ultra (canon-breaking), gpt-oss-120b as drafter (weakest prose;
+# kept only as last-resort fallback).
 
 pov_models:
+  # ovist-rhoam chapters are voice-critical: procedural diction, counting habit.
   ovist-rhoam:
     provider: openrouter
-    model: minimax/minimax-m3:free # spike winner 2026-08-25
+    model: minimax/minimax-m3:free # spike winner: best voice + length adherence
+  # brannec-tull chapters are terse action; flash-lite suits the register and
+  # diversifies the provider so consecutive chapters never share one quota.
   brannec-tull:
     provider: gemini
-    model: gemini-3.5-flash-lite # verified generating 2026-08-25
+    model: gemini-3.5-flash-lite # 7s latency; add explicit word-target instruction
 
-fallback_chain:
-  # Same model, different provider — survives OpenRouter pulling the :free slug.
+fallback_chain: # applies when a pov_model's provider fails or is rate-limited
   - provider: nvidia
-    model: minimaxai/minimax-m3 # verified generating 2026-08-25
+    model: minimaxai/minimax-m3 # same model, independent quota
   - provider: groq
-    model: openai/gpt-oss-120b # verified generating 2026-08-25; prose weakest
-  - provider: mistral
-    model: mistral-large-latest # verified generating 2026-08-25; undershoots length
+    model: openai/gpt-oss-120b # fastest; weakest prose = last resort
 
 editor_model:
-  primary: { provider: mistral, model: mistral-large-latest } # structured output support to be tested in Phase 2
-  fallback: { provider: openrouter, model: dots-studio/dots-3-note-preview:free }
+  primary: { provider: gemini, model: gemini-3.5-flash-lite } # valid JSON w/ responseMimeType, verified
+  fallback: { provider: mistral, model: mistral-large-latest } # valid JSON w/ json_object, verified
 
 generation_params:
   temperature: 0.9
