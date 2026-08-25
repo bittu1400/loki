@@ -159,6 +159,10 @@ def _load_yaml(path: Path) -> object:
         raise ConfigError(f"Cannot read {path}: {exc}") from exc
     except yaml.YAMLError as exc:
         raise ConfigError(f"{path} is not valid YAML: {exc}") from exc
+    if data is None:
+        # An all-comments file (e.g. the template character index) is an
+        # intentionally empty document.
+        return {}
     if not isinstance(data, dict):
         raise ConfigError(
             f"{path} must contain a YAML mapping at top level; "
@@ -200,8 +204,8 @@ def load_character_index(path: Path) -> dict[str, CharacterEntry]:
             characters[character_id] = CharacterEntry.model_validate(entry)
         except ValueError as exc:
             raise ConfigError(f"{path}: character {character_id!r}: {exc}") from exc
-    if not characters:
-        raise ConfigError(f"{path} defines no characters.")
+    # An empty index is valid for a freshly scaffolded book; the manifest
+    # POV check enforces resolution once chapters are planned.
     return characters
 
 

@@ -2,8 +2,14 @@
 # character_id -> file, pov flag, model key (keys into models.yaml pov_models).
 # character_id and file are kebab-case; every manifest `pov` value must
 # resolve to an id here or startup validation fails.
-
-kaelen:
-  file: kaelen.md
-  pov: true
-  model: kaelen
+#
+# Add one block per character, then create <character-id>.md beside this
+# file. Set pov: true only for characters who carry chapters, and give each
+# of those a matching key under pov_models in config/models.yaml.
+#
+# Example:
+#
+# kaelen:
+#   file: kaelen.md
+#   pov: true
+#   model: kaelen
