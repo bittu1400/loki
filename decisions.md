@@ -17,6 +17,8 @@ for "later". If it is not in this file, it was not decided.
 | 6 | 2026-08-25 | `vault/example-book/` fixture is an invented throwaway story, deliberately awkward (odd names, tricky continuity), not the author's real book. Resolves OQ-05.1; OQ-05.2 (the real book) stays open until Phase 3 nears. | — |
 | 7 | 2026-08-25 | Model routing settled after live spikes: drafting primary `openrouter:minimax-m3:free` with `nvidia:minimaxai/minimax-m3` as same-model mirror; `gemini:gemini-3.5-flash-lite` for brannec-tull POV chapters; editorial `gemini flash-lite` → `mistral:mistral-large`. Full table in example-book `config/models.yaml`. | — |
 | 8 | 2026-08-25 | Provider stability principle: every route needs a fallback on a **different provider**, ideally the same model served twice. Provider diversity is a requirement, not an optimisation. Dismissed providers (cohere, z.ai, cerebras, github-models) are commented out of `.env` with reasons and must not be re-added without new evidence. | — |
+| 9 | 2026-08-25 | AiHubMix added as sixth provider (`AIHUBMIX_API_KEY`), slotted into the drafting fallback chain between nvidia and groq. Direct MiniMax platform key was evaluated and rejected: pay-as-you-go only, violates the hard 0-cost constraint. Free lanes for minimax-m3 are now openrouter → nvidia → aihubmix. | — |
+| 10 | 2026-08-25 | Terminal case — every provider exhausted: the session still writes output, never silently fails and never fakes success. It writes a clearly-marked failed-draft stub chapter (manifest status stays `planned`, stub is excluded from continuity) at zero cost. | [ADR-0005](adr.md#adr-0005--all-providers-failed-stub-draft) |
 
 ## Pending
 

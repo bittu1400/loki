@@ -187,7 +187,9 @@ def test_build_providers_skips_missing_keys() -> None:
     assert set(providers) == {"gemini", "groq"}
 
 
-@pytest.mark.parametrize("name", ["openrouter", "groq", "mistral", "nvidia"])
+@pytest.mark.parametrize(
+    "name", ["openrouter", "groq", "mistral", "nvidia", "aihubmix"]
+)
 def test_every_openai_compat_provider_builds(name: str) -> None:
     from novel_engine.providers import ENV_KEYS, build_providers
 

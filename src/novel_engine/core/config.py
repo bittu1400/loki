@@ -30,6 +30,7 @@ KNOWN_PROVIDERS: dict[str, str] = {
     "groq": "GROQ_API_KEY",
     "mistral": "MISTRAL_API_KEY",
     "nvidia": "NVIDIA_API_KEY",
+    "aihubmix": "AIHUBMIX_API_KEY",
     "cohere": "COHERE_API_KEY",
     "zai": "GLM_API_KEY",
 }

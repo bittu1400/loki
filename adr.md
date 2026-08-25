@@ -317,3 +317,77 @@ config change, not a refactor.
   Because paths are configurable, this remains available later at low cost.
 - **Commit everything including real books.** Rejected by the author: the
   manuscript is private.
+
+---
+
+## ADR-0005 — All Providers Failed → Stub Draft
+
+- **Status:** Accepted
+- **Date:** 2026-08-25
+- **Deciders:** Author
+
+### Context
+
+The pipeline's availability strategy is layered fallback across six
+providers, with retries only for rate-limits. But fallback chains are
+finite: an extreme session can exhaust every route (simultaneous quota
+exhaustion, a regional outage, all keys revoked). The router then returns
+a terminal outcome and the drafting loop must decide what to do. Three
+bad options exist:
+
+1. **Write nothing.** The session dies silently; the author returns to no
+   artifact, no record of what failed, and no way to distinguish "never
+   ran" from "ran and died".
+2. **Retry forever.** Burns quota against providers that are already
+   refusing, and violates the permanent-failure rule (best-practices §8.3).
+3. **Pretend success.** Flip the manifest to `written` on nothing. This
+   poisons canon state — the worst possible outcome in a system whose
+   whole point is trustworthy continuity.
+
+### Decision
+
+When every route is exhausted, the session **still writes output**: a
+clearly-marked stub draft at `chapters/chapter-NNN.md`, produced locally
+at zero cost, containing:
+
+- frontmatter with `status: failed-stub`, `fallback_triggered: true`, and
+  the terminal failure summary (last error per provider attempted);
+- a placeholder body stating that generation failed and must be re-run
+  with `--force`.
+
+Hard guarantees around it:
+
+- The manifest status **stays `planned`** — the stub never counts as
+  written.
+- Downstream phases (summaries, editorial deltas, continuation tails)
+  treat `failed-stub` chapters as absent.
+- No API calls are made producing the stub; the cost of total failure is
+  exactly zero.
+
+A re-run with `--force` replaces the stub with a real attempt.
+
+### Consequences
+
+**Positive**
+
+- Every session leaves an auditable artifact: what was attempted, what
+  failed, where to resume.
+- The invariant "the engine never lies about what it wrote" holds even at
+  total failure.
+- Zero-cost guarantee survives the worst case, not just the happy path.
+
+**Negative**
+
+- A stub file exists where a reader expects prose; mitigated by the
+  explicit `failed-stub` status and placeholder body.
+- Downstream code must remember to skip `failed-stub` chapters — this is
+  now a spec requirement (specs.md §3), not an implementation detail.
+
+### Alternatives considered
+
+- **Exit non-zero, write nothing.** Simplest, but loses the audit trail
+  and makes automated resumption harder. Rejected by the author: "write
+  something out, even if trash."
+- **Quarantine directory for stubs.** Cleaner vault hygiene, but splits
+  the "one chapter number, one file" rule that makes the vault legible.
+

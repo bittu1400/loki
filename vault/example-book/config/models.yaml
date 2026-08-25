@@ -22,6 +22,8 @@ pov_models:
 fallback_chain: # applies when a pov_model's provider fails or is rate-limited
   - provider: nvidia
     model: minimaxai/minimax-m3 # same model, independent quota
+  - provider: aihubmix
+    model: minimax-m3-free # third free lane for the same model (added 2026-08-25)
   - provider: groq
     model: openai/gpt-oss-120b # fastest; weakest prose = last resort
 

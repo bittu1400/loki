@@ -16,6 +16,7 @@ FAKE_ENV = {
     "GROQ_API_KEY": "test-groq",
     "MISTRAL_API_KEY": "test-mistral",
     "NVIDIA_API_KEY": "test-nvidia",
+    "AIHUBMIX_API_KEY": "test-aihubmix",
     "COHERE_API_KEY": "test-cohere",
     "GLM_API_KEY": "test-zai",
 }

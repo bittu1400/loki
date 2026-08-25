@@ -12,7 +12,14 @@ from collections.abc import Mapping
 
 import httpx
 
-from novel_engine.providers import gemini, groq, mistral, nvidia, openrouter
+from novel_engine.providers import (
+    aihubmix,
+    gemini,
+    groq,
+    mistral,
+    nvidia,
+    openrouter,
+)
 from novel_engine.providers.base import Provider
 
 #: provider name -> env var holding its key.
@@ -21,6 +28,7 @@ ENV_KEYS: dict[str, str] = {
     "groq": "GROQ_API_KEY",
     "mistral": "MISTRAL_API_KEY",
     "nvidia": "NVIDIA_API_KEY",
+    "aihubmix": "AIHUBMIX_API_KEY",
 }
 
 
@@ -44,6 +52,8 @@ def build_providers(
             providers[name] = groq.build(key, transport=transport)
         elif name == "mistral":
             providers[name] = mistral.build(key, transport=transport)
+        elif name == "aihubmix":
+            providers[name] = aihubmix.build(key, transport=transport)
         else:
             providers[name] = nvidia.build(key, transport=transport)
 
@@ -55,6 +65,7 @@ def build_providers(
 
 __all__ = [
     "Provider",
+    "aihubmix",
     "build_providers",
     "gemini",
     "groq",
