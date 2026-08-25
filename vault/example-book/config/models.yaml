@@ -1,23 +1,32 @@
 # Model routing only (OQ-03). Pipeline behaviour lives in pipeline.yaml.
 #
-# Fixture values: model IDs here are placeholders for tests, NOT verified
-# live slugs (OQ-02). Nothing in this repo has called a provider yet.
+# Verification status (2026-08-25, key checked via provider listing APIs):
+# - gemini: key valid; 2.5-flash + flash-lite listed; 2.5-pro LISTED but its
+#   free quota may be 0-50 RPD (sources conflict) — verify with a real call.
+# - openrouter: key valid, free tier, 0 spent. 21 :free models live.
+#   Limits: 20 RPM / 50 RPD (1000 RPD after one-time $10 credit purchase).
+# - groq: key valid; llama-3.3-70b-versatile NO LONGER EXISTS. Live text
+#   models: openai/gpt-oss-120b, qwen/qwen3.6-27b, groq/compound(-mini).
+#
+# NOTE: "listed" means visible via the models endpoint. No generation call
+# has been made yet — prose quality is untested everywhere (OQ-04).
 
 pov_models:
   ovist-rhoam:
     provider: gemini
-    model: gemini-2.5-flash
+    model: gemini-2.5-flash # listed 2026-08-25
   brannec-tull:
-    provider: groq
-    model: llama-3.3-70b-versatile
-    # verified: never (fixture value, OQ-02)
+    provider: openrouter
+    model: thinkingmachines/inkling:free # largest general free model, listed 2026-08-25
 
 fallback_chain:
+  - provider: groq
+    model: openai/gpt-oss-120b # replaces dead llama-3.3-70b-versatile, listed 2026-08-25
   - provider: openrouter
-    model: qwen/qwen3-235b-a22b:free
+    model: nvidia/nemotron-3-ultra-550b-a55b:free # listed 2026-08-25
 
 editor_model:
-  primary: { provider: gemini, model: gemini-2.5-pro }
+  primary: { provider: openrouter, model: z-ai/glm-5.2:free } # supports structured_outputs, listed 2026-08-25
   fallback: { provider: gemini, model: gemini-2.5-flash }
 
 generation_params:
