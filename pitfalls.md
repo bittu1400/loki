@@ -230,6 +230,22 @@ loop passing the draft's tail, capped at `max_continuation_rounds`. Record
 `Retry-After` header when present. Without jitter, retries synchronise and
 re-collide.
 
+### 🟠 C7 — NVIDIA NIM keys silently expiring (~6 months)
+
+**The trap.** NIM API keys are valid for only about **six months** from
+creation — NVIDIA says so when the key is issued, then nobody remembers.
+
+**Cost.** Months later, `nvidia` routes start returning 401/403 with no
+code change to explain it. Because 401 is classified as permanent failure,
+the fallback chain quietly skips a lane — or worse, if nvidia is the last
+healthy lane, drafting degrades for no visible reason. The failure looks
+like an engine bug; it is calendar rot.
+
+**Countermeasure.** Record the key's creation date next to it in `.env`
+and regenerate before expiry (`.env.example` carries the warning too).
+Treat "nvidia suddenly 401s" as a first diagnostic for expired keys before
+debugging anything else.
+
 ---
 
 ## D. Automation and workflow
