@@ -278,9 +278,9 @@ Verified before a phase is marked complete in [progress.md](progress.md).
 - [x] Vault path resolution rejects any path escaping the book root
 
 **Phase 2 — providers**
-- [ ] Logger redacts by allowlist; no raw headers or bodies logged
-- [ ] Keys read from environment only; never a default, never a literal
-- [ ] Permanent failures do not trigger fallback
+- [x] Logger redacts by allowlist; no raw headers or bodies logged
+- [x] Keys read from environment only; never a default, never a literal
+- [x] Permanent failures do not trigger fallback
 
 **Phase 3 — drafting**
 - [ ] Continuation loop is hard-capped
