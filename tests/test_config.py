@@ -74,8 +74,10 @@ def test_unknown_provider_rejected(book: Path) -> None:
 
 def test_empty_model_id_rejected(book: Path) -> None:
     models = book / "config/models.yaml"
+    text = models.read_text()
+    assert "minimax/minimax-m3:free" in text  # guard: update if routes change
     models.write_text(
-        models.read_text().replace("model: gemini-2.5-flash", 'model: ""', 1)
+        text.replace("minimax/minimax-m3:free", '""', 1)
     )
     with pytest.raises(ConfigError, match="model ID is empty"):
         load_book_config(book.parent, "example-book", env=FAKE_ENV)

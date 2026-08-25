@@ -1,33 +1,33 @@
 # Model routing only (OQ-03). Pipeline behaviour lives in pipeline.yaml.
 #
-# Verification status (2026-08-25, key checked via provider listing APIs):
-# - gemini: key valid; 2.5-flash + flash-lite listed; 2.5-pro LISTED but its
-#   free quota may be 0-50 RPD (sources conflict) — verify with a real call.
-# - openrouter: key valid, free tier, 0 spent. 21 :free models live.
-#   Limits: 20 RPM / 50 RPD (1000 RPD after one-time $10 credit purchase).
-# - groq: key valid; llama-3.3-70b-versatile NO LONGER EXISTS. Live text
-#   models: openai/gpt-oss-120b, qwen/qwen3.6-27b, groq/compound(-mini).
-#
-# NOTE: "listed" means visible via the models endpoint. No generation call
-# has been made yet — prose quality is untested everywhere (OQ-04).
+# Verification status (2026-08-25, live generation probes — see OQ-02/OQ-04):
+# - gemini: 2.5 family CLOSED to new keys (404). Working: gemini-3.5-flash-lite
+#   (7s, 781 words). gemini-3.7-flash: persistent 503 high-demand.
+# - openrouter: inkling:free = 403 (agentic-only). glm-5.2:free = upstream
+#   429 twice, unreliable. minimax-m3:free WORKS (16s, 925 words — best of
+#   spike). Limits: 20 RPM / 50 RPD; author cannot buy the $10 credit tier.
+# - groq: gpt-oss-120b works (5s) but prose quality weakest of four tested.
 
 pov_models:
   ovist-rhoam:
-    provider: gemini
-    model: gemini-2.5-flash # listed 2026-08-25
-  brannec-tull:
     provider: openrouter
-    model: thinkingmachines/inkling:free # largest general free model, listed 2026-08-25
+    model: minimax/minimax-m3:free # spike winner 2026-08-25
+  brannec-tull:
+    provider: gemini
+    model: gemini-3.5-flash-lite # verified generating 2026-08-25
 
 fallback_chain:
   - provider: groq
-    model: openai/gpt-oss-120b # replaces dead llama-3.3-70b-versatile, listed 2026-08-25
+    model: openai/gpt-oss-120b # verified generating 2026-08-25; prose weakest
   - provider: openrouter
-    model: nvidia/nemotron-3-ultra-550b-a55b:free # listed 2026-08-25
+    model: nvidia/nemotron-3-ultra-550b-a55b:free # generates OK; canon-drifts
 
 editor_model:
-  primary: { provider: openrouter, model: z-ai/glm-5.2:free } # supports structured_outputs, listed 2026-08-25
-  fallback: { provider: gemini, model: gemini-2.5-flash }
+  # gemini-2.5-pro is dead for new keys. Structured-output-capable free
+  # options are scarce; glm-5.2 advertises structured_outputs but was
+  # saturated during testing. Re-verify before Phase 5.
+  primary: { provider: openrouter, model: z-ai/glm-5.2:free }
+  fallback: { provider: openrouter, model: dots-studio/dots-3-note-preview:free }
 
 generation_params:
   temperature: 0.9

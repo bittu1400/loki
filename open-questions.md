@@ -55,37 +55,26 @@ privacy.
 ## 🔴 OQ-02 — Which free-tier models and IDs actually work right now?
 
 **Blocks:** Phase 2 (provider layer) completion.
-**Owner:** Author — in progress.
+**Owner:** Author — mostly resolved 2026-08-25 by live API probes (listing +
+generation). Remaining unknowns marked below.
 
-**The situation.** Every model ID in `prompt.md` and in
-[specs.md](specs.md) §9 is an assumption. `:free` slugs get renamed,
-rate-limited to uselessness, and pulled without notice. Building a fallback
-chain on unverified IDs means the first real failure is a confusing 404
-mid-session.
+**Verified 2026-08-25** (all three keys valid):
 
-**Scope.** For each of Gemini AI Studio, OpenRouter, and Groq, what is
-needed before Phase 2 can be finished:
+| Provider | Finding |
+|---|---|
+| Gemini | **Entire 2.5 family is closed to new keys** (`gemini-2.5-flash`, `-flash-lite`, `-pro` all return 404 "no longer available to new users"). Working: `gemini-3.5-flash-lite` (fast, free). `gemini-3.7-flash` exists but returned persistent 503 high-demand during testing. |
+| OpenRouter | Key valid, free tier. Limits: 20 RPM / **50 requests/day** (1000/day after one-time $10 credits — author cannot purchase; design to 50/day). `thinkingmachines/inkling:free` returns 403 "only available on agentic harnesses" — unusable via plain API. `z-ai/glm-5.2:free` was upstream-saturated (429) across two attempts hours apart — treat as unreliable. `minimax/minimax-m3:free` works well. |
+| Groq | Key valid. **`llama-3.3-70b-versatile` no longer exists.** `openai/gpt-oss-120b` works (very fast: ~5s). |
 
-1. **Which model IDs are live and free** — exact slug strings, verified by a
-   real call, not from documentation.
-2. **Rate limits** — requests per minute and per day, and tokens per minute
-   where it applies. The daily cap is what determines whether a session can
-   run at all.
-3. **Max output tokens per call** — this decides whether a 1000-word chapter
-   is one call or needs the continuation loop routinely.
-4. **Structured-output support** — does the model honour a JSON schema or
-   JSON mode? This matters most for the editorial pass and its fallback
-   (pitfall C2).
-5. **`gemini-2.5-pro` free-tier status specifically** — it is proposed as
-   the editorial model, is called every session, and is the tightest-rationed
-   model in the stack. If its free tier is absent or too limited, the
-   editorial model choice changes.
-6. **Data-use terms** — confirm the current posture per provider
-   ([threat-model.md](threat-model.md) §3).
+**Consequence for specs.md §9:** every default in that section is now known
+to be wrong or dead. The editorial model especially: `gemini-2.5-pro` is not
+obtainable, so the editorial primary must be re-chosen from live options.
+Structured-output support among free models is rare — only `glm-5.2`,
+`nemotron-3-super`, and `dots-3-note` advertise it, and the first was
+saturated during testing.
 
-**Recommendation:** record findings directly into `config/models.yaml` with
-a dated comment per entry, so the next session knows when each was last
-verified.
+**Still unverified:** exact daily quotas per Gemini model on this key;
+whether `glm-5.2:free` recovers; Groq daily token ceilings.
 
 ---
 
@@ -113,28 +102,40 @@ goes wrong. Marked **PROPOSED** in specs.md until confirmed.
 ## 🟠 OQ-04 — Has the prose spike been run, and what did it show?
 
 **Blocks:** the decision to continue at all. Also informs OQ-06.
+**Status:** RUN 2026-08-25. Identical assembled prompt (Salt Almanac ch-003
+beat, full context per best-practices §2) sent to four live free models.
 
-**The situation.** No one has verified that free-tier models writing
-1000-word chapters from a beat sheet produce prose worth reading. This is
-the project's core untested assumption (pitfall B1), and all three model
-analyses of `prompt.md` skipped it.
+**Raw outputs:** session transcript; not committed (they are experiments,
+not canon).
 
-**Scope.** Hand-paste a realistic prompt — story bible excerpt, style guide,
-character sheet, one beat — into each of the three providers. Generate three
-chapters. Read them. Answer:
+**Results, ranked:**
 
-1. Is any of it worth automating?
-2. Which provider's output is closest to the target voice?
-3. Does the model hold ~1000 words, or does it resolve the scene early?
-4. What does it get wrong that a better prompt could fix, versus what is a
-   model ceiling?
+| Model | Words | Latency | Verdict |
+|---|---|---|---|
+| `minimax/minimax-m3:free` | 925 | 16s | **Best overall.** Held the POV's procedural voice and counting habit, respected continuity (nine-year suspension), ended on a concrete image that mirrors ch-001's ending. Closest to target length. |
+| `gemini-3.5-flash-lite` | 781 | 7s | **Best prose-per-word**, fastest. Used ledger-ear from the power-system doc unprompted. Under length (fails ±10% check). Invented an apprentice and a King — mild canon drift. |
+| `nvidia/nemotron-3-ultra:free` | 1587 | 111s | Interesting but broken: overshot by 58%, fragment-heavy rhythm (mean sentence 7.7 words), slow, and **had the driftglass echo speak to Ovist directly — violates power-system.md rule that echoes are not interactive**. |
+| `openai/gpt-oss-120b` (Groq) | 1281 | 5s | Weakest. Exposition via dialogue, repeated tide metaphors, used the city name *Mirek* as a person, inserted Gregorian dates (1843) into an invented calendar. |
 
-**Why it matters beyond go/no-go.** The answers directly set `target_words`
-(OQ-06), the initial `pov_models` assignment, and the first draft of the
-banned-phrase list in `style-guide.md`.
+**Answers to the four questions:**
 
-**Recommendation:** run it before Phase 3. It costs one evening and no code,
-and it can save weeks.
+1. **Worth automating? Provisionally yes.** Two of four outputs are
+   competent published-fiction-grade prose. The architecture is not building
+   on a false premise.
+2. **Closest to target voice:** minimax-m3, with flash-lite a close second
+   at better quality-per-word.
+3. **~1000-word adherence:** only minimax-m3 held it. The others need either
+   per-model word instructions or the continuation loop routinely.
+4. **Prompt-fixable vs ceiling:** word-count discipline and "do not invent
+   named characters or real-world dates" are prompt-fixable. gpt-oss's
+   exposition habit and nemotron's fragmentation look like model ceilings.
+
+**Consequence for OQ-06:** 1000 words remains reasonable as a target, but
+`word_tolerance` needs to be enforced by the continuation loop rather than
+assumed.
+
+**Recommendation:** assign minimax-m3:free as primary drafting route;
+flash-lite as the fast fallback. Re-verify monthly — this roster will rot.
 
 ---
 
