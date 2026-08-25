@@ -1,0 +1,25 @@
+# Pipeline behaviour only (OQ-03). Model routing lives in models.yaml.
+
+target_words: 1000
+word_tolerance: 0.10 # accept 900-1100
+max_continuation_rounds: 3
+
+context:
+  previous_chapter_tail_words: 500
+  recent_summaries: 2
+  max_locked_facts: 40
+  token_budget: 12000
+
+retry:
+  max_attempts: 4
+  base_delay_seconds: 1
+  jitter: true
+  respect_retry_after: true
+
+editorial:
+  enabled: true
+  max_repair_attempts: 2
+  fail_closed: true # never half-apply a delta
+
+# Deferred (ADR-0001) — present so the shape is fixed early
+auto_publish: false

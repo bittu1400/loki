@@ -1,0 +1,9 @@
+# Character index.
+# character_id -> file, pov flag, model key (keys into models.yaml pov_models).
+# character_id and file are kebab-case; every manifest `pov` value must
+# resolve to an id here or startup validation fails.
+
+kaelen:
+  file: kaelen.md
+  pov: true
+  model: kaelen

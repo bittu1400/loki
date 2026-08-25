@@ -1,0 +1,24 @@
+# Model routing only (OQ-03). Pipeline behaviour lives in pipeline.yaml.
+#
+# Every model ID below is an assumption until verified by a real call
+# (OQ-02). Free-tier availability changes without notice; add a dated
+# comment per entry recording when each was last verified.
+
+pov_models: {}
+#  <character-id>:
+#    provider: gemini        # gemini | openrouter | groq
+#    model: <model-id>
+#    # verified: 2026-08-25
+
+fallback_chain: []
+#  - { provider: groq, model: <model-id> }
+#  - { provider: openrouter, model: <model-id> }
+
+editor_model:
+  primary: { provider: gemini, model: gemini-2.5-pro } # free-tier status unverified (OQ-02)
+  fallback: { provider: gemini, model: gemini-2.5-flash }
+
+generation_params:
+  temperature: 0.9
+  top_p: 0.95
+  seed: null # pinned where the provider supports it; ignored otherwise
