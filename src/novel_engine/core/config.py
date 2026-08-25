@@ -28,6 +28,10 @@ KNOWN_PROVIDERS: dict[str, str] = {
     "gemini": "GEMINI_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
     "groq": "GROQ_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "nvidia": "NVIDIA_API_KEY",
+    "cohere": "COHERE_API_KEY",
+    "zai": "GLM_API_KEY",
 }
 
 REQUIRED_FILES = (

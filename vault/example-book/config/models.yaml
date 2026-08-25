@@ -1,12 +1,14 @@
 # Model routing only (OQ-03). Pipeline behaviour lives in pipeline.yaml.
 #
-# Verification status (2026-08-25, live generation probes — see OQ-02/OQ-04):
-# - gemini: 2.5 family CLOSED to new keys (404). Working: gemini-3.5-flash-lite
-#   (7s, 781 words). gemini-3.7-flash: persistent 503 high-demand.
-# - openrouter: inkling:free = 403 (agentic-only). glm-5.2:free = upstream
-#   429 twice, unreliable. minimax-m3:free WORKS (16s, 925 words — best of
-#   spike). Limits: 20 RPM / 50 RPD; author cannot buy the $10 credit tier.
-# - groq: gpt-oss-120b works (5s) but prose quality weakest of four tested.
+# Verification status (2026-08-25, second round — live generation probes):
+# - minimax-m3 confirmed on TWO providers: openrouter AND nvidia (stable
+#   fallback lane; same model, independent quotas).
+# - mistral free tier verified: small + large both generate (~1B tok/mo).
+#   Large resolves scenes early (347 words vs 1000 target) when drafting.
+# - cohere command-a-plus works only with thinking disabled; 3x overshoot.
+# - cerebras: 402 payment required despite "free" listing. Dead for us.
+# - github models: fully retired 2026-07-30. Never add it.
+# - z.ai: flash tier free but overloaded during testing; glm-5.x needs balance.
 
 pov_models:
   ovist-rhoam:
@@ -17,16 +19,16 @@ pov_models:
     model: gemini-3.5-flash-lite # verified generating 2026-08-25
 
 fallback_chain:
+  # Same model, different provider — survives OpenRouter pulling the :free slug.
+  - provider: nvidia
+    model: minimaxai/minimax-m3 # verified generating 2026-08-25
   - provider: groq
     model: openai/gpt-oss-120b # verified generating 2026-08-25; prose weakest
-  - provider: openrouter
-    model: nvidia/nemotron-3-ultra-550b-a55b:free # generates OK; canon-drifts
+  - provider: mistral
+    model: mistral-large-latest # verified generating 2026-08-25; undershoots length
 
 editor_model:
-  # gemini-2.5-pro is dead for new keys. Structured-output-capable free
-  # options are scarce; glm-5.2 advertises structured_outputs but was
-  # saturated during testing. Re-verify before Phase 5.
-  primary: { provider: openrouter, model: z-ai/glm-5.2:free }
+  primary: { provider: mistral, model: mistral-large-latest } # structured output support to be tested in Phase 2
   fallback: { provider: openrouter, model: dots-studio/dots-3-note-preview:free }
 
 generation_params:

@@ -14,6 +14,10 @@ FAKE_ENV = {
     "GEMINI_API_KEY": "test-gemini",
     "OPENROUTER_API_KEY": "test-openrouter",
     "GROQ_API_KEY": "test-groq",
+    "MISTRAL_API_KEY": "test-mistral",
+    "NVIDIA_API_KEY": "test-nvidia",
+    "COHERE_API_KEY": "test-cohere",
+    "GLM_API_KEY": "test-zai",
 }
 
 

@@ -76,6 +76,24 @@ saturated during testing.
 **Still unverified:** exact daily quotas per Gemini model on this key;
 whether `glm-5.2:free` recovers; Groq daily token ceilings.
 
+**Second round 2026-08-25 (author added four more keys; all verified):**
+
+| Provider | Status |
+|---|---|
+| Mistral | ✅ Free Experiment tier works, no card (phone verify only). `mistral-small-latest` + `mistral-large-latest` both generate. Large resolves scenes early when drafting (347 words vs 1000 target) — fine for editorial calls, needs the continuation loop for drafting. |
+| NVIDIA NIM | ✅ Key works; **hosts `minimaxai/minimax-m3` and `meta/llama-3.3-70b` directly** — same model as our spike winner on an independent quota. This is the stable-fallback answer: cross-provider duplication beats betting on any one provider's free pool. |
+| Cohere | ⚠️ Works (~1,000 calls/mo) but Command A+ emits a thinking block that must be disabled via request param; even then it wrote 3,248 words against a 1,000-word target. Usable in extremis, poor length discipline. |
+| Z.ai | ⚠️ Only GLM-Flash tier is free (`glm-4.7-flash`); larger models return "insufficient balance". Flash was overloaded during testing. |
+| Cerebras | ❌ Returns 402 payment-required for generation despite a working free listing and "free tier" marketing. Dead for us. |
+| GitHub Models | ❌ Fully retired 2026-07-30 (changelog-confirmed). Never configure it. |
+
+**Stability principle recorded:** every route must have a fallback that is
+(a) on a different provider, and ideally (b) the same model family served
+by two providers, so a slug pull or free-pool collapse degrades quality
+rather than ending the session. minimax-m3 currently satisfies this;
+nothing else does yet — Phase 2's router should treat provider diversity
+as a requirement, not an optimization.
+
 ---
 
 ## ~~🟠 OQ-03 — Confirm the `models.yaml` / `pipeline.yaml` split~~ — RESOLVED 2026-08-25
