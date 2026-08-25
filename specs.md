@@ -299,7 +299,7 @@ half-apply state.
 
 ---
 
-## 10. `config/pipeline.yaml` — behaviour only  **[PROPOSED]**
+## 10. `config/pipeline.yaml` — behaviour only  *(confirmed 2026-08-25, OQ-03)*
 
 ```yaml
 target_words: 1000

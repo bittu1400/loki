@@ -89,7 +89,11 @@ verified.
 
 ---
 
-## 🟠 OQ-03 — Confirm the `models.yaml` / `pipeline.yaml` split
+## ~~🟠 OQ-03 — Confirm the `models.yaml` / `pipeline.yaml` split~~ — RESOLVED 2026-08-25
+
+**Resolved:** split confirmed (decisions.md #5). `models.yaml` = routing
+only; `pipeline.yaml` = behaviour. The `PROPOSED` marker in
+[specs.md](specs.md) §9–10 has been removed.
 
 **Blocks:** Phase 1 (config loader) — low risk either way.
 
@@ -146,18 +150,14 @@ with full frontmatter, and a populated continuity tracker.
 
 **Scope.** Two sub-questions:
 
-1. **Should `example-book` be a throwaway invented story, or a stripped-down
-   version of the author's real book?** Recommendation: **invented and
-   throwaway.** It is committed to git, so anything real in it is public.
-   An invented one can also be deliberately awkward — odd names, tricky
-   continuity, a resolved thread — to exercise edge cases a real book might
-   not hit.
-2. **What is the author's actual first book?** Not needed for Phase 1, but
-   needed before Phase 3 generates anything real, and it is the input to the
-   conversational intake interview that replaced `new_book.py` (ADR-0001).
-
-**Recommendation:** I invent `example-book` in Phase 1 without further
-input. The real book is a separate conversation, held when Phase 3 is close.
+1. ~~**Should `example-book` be a throwaway invented story, or a stripped-down
+   version of the author's real book?**~~ **RESOLVED 2026-08-25:** invented
+   throwaway (decisions.md #6). Deliberately awkward — odd names, tricky
+   continuity — to exercise edge cases a real book might not hit.
+2. **What is the author's actual first book?** Still open. Not needed for
+   Phase 1, but needed before Phase 3 generates anything real, and it is the
+   input to the conversational intake interview that replaced `new_book.py`
+   (ADR-0001).
 
 ---
 
