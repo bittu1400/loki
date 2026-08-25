@@ -1,4 +1,4 @@
-"""Groq route constants and constructor."""
+"""NVIDIA NIM route constants and constructor."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import httpx
 
 from novel_engine.providers.openai_compat import OpenAICompatProvider
 
-NAME = "groq"
-BASE_URL = "https://api.groq.com/openai/v1"
+NAME = "nvidia"
+BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 
 def build(

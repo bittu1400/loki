@@ -1,4 +1,4 @@
-"""Groq route constants and constructor."""
+"""Mistral La Plateforme route constants and constructor."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import httpx
 
 from novel_engine.providers.openai_compat import OpenAICompatProvider
 
-NAME = "groq"
-BASE_URL = "https://api.groq.com/openai/v1"
+NAME = "mistral"
+BASE_URL = "https://api.mistral.ai/v1"
 
 
 def build(
