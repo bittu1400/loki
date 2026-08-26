@@ -203,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
             args.vault_root,
             os.environ,
             chapter=args.chapter,
-            dry_run=args.dry_run,
+            dry_run=args.dry_run or os.environ.get("DRY_RUN") == "1",
             force=args.force,
         )
     except NovelEngineError as exc:

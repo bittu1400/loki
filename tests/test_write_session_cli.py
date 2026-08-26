@@ -171,3 +171,14 @@ def test_all_routes_fail_stub_exit_code_one(book) -> None:
     assert next(e for e in manifest if e.chapter_number == 3).status == "planned"
 
     assert len(new_session_files(book)) == 1
+
+
+def test_dry_run_env_var(monkeypatch, book, capsys) -> None:
+    from novel_engine.cli.write_session import main
+
+    monkeypatch.setenv("DRY_RUN", "1")
+    code = main(["--book", "example-book", "--vault-root", str(book.resolve())])
+    assert code == 0
+    assert new_session_files(book) == []
+    assert not (book / "example-book/chapters/chapter-003.md").exists()
+    assert "Ovist pulls nine years" in capsys.readouterr().out

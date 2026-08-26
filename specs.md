@@ -135,15 +135,21 @@ The copper conduits hummed against Kaelen's teeth…
   differ, a fallback fired, and that is the first thing to look at when a
   chapter's voice is off.
 - `generated_hash` is the SHA-256 of the **body as originally generated**,
-  and is **immutable**. It is not a checksum of the current file.
-  Recomputing the current body's hash and comparing to `generated_hash`
-  answers "has the author edited this chapter?" — which is precisely the
-  trigger for the author-edit feedback loop
-  ([architecture.md](architecture.md) §7). A hash that silently invalidates
-  on every edit would be useless; this one carries information *because* it
-  goes stale.
+  and is **immutable**. Concretely (as implemented in Phase 3): computed
+  by `vault.write_chapter` over everything after the frontmatter exactly
+  as stored — leading blank lines stripped, trailing newline included.
+  Callers who supply their own hash are rejected; the file is re-read
+  after writing and verified against its own recorded hash. Recomputing
+  the current body's hash and comparing to `generated_hash` answers "has
+  the author edited this chapter?" — which is precisely the trigger for
+  the author-edit feedback loop ([architecture.md](architecture.md) §7).
+  A hash that silently invalidates on every edit would be useless; this
+  one carries information *because* it goes stale.
 - `status` values and legal transitions are defined in §11.
 - Frontmatter is flat and scalar-only for Notion compatibility (§1).
+- Failed sessions (ADR-0005) use status `failed-stub`, `actual_words: 0`,
+  and an empty `actual_model`; the stub body carries the last error per
+  provider. The manifest stays `planned`.
 
 ---
 
@@ -262,6 +268,10 @@ who caused it. Chapter 15 picks up with Lyra, who does not yet know.
 · `reconciled` · `complete`. On startup the engine reads this to decide
 whether to run fresh, resume, or refuse.
 
+*(Status as of 2026-08-26: this file's format is fixed and the fixture
+ships it, but nothing reads or writes its frontmatter yet — persistence
+of session phases is Phase 6 work.)*
+
 ---
 
 ## 9. `config/models.yaml` — routing only
@@ -373,8 +383,10 @@ as OQ-03.
 
 **Rules**
 
-- Every phase transition is persisted to `log/next-step.md` before the next
-  phase begins. A crash between phases is therefore always resumable.
+- Every phase transition is persisted to `log/next-step.md` before the
+  next phase begins. A crash between phases is therefore always resumable.
+  *(Phase 6 — v1 currently persists the chapter, manifest flip, and audit
+  JSON, but not yet the phase pointer.)*
 - Re-running a session whose chapter already exists on disk **never
   overwrites it**. The engine resumes from the recorded phase, or refuses
   with a precise message naming the chapter and its current phase.
@@ -519,10 +531,25 @@ check-style --book <book-slug> --chapter N
 
 | Flag | Behaviour |
 |---|---|
-| `--dry-run` | Assemble context, print the exact prompt, exit before any API call. Also settable via `DRY_RUN=1`. |
-| `--chapter N` | Override manifest target selection. Refuses if chapter N already exists unless `--force`. |
-| `--resume` | Continue an interrupted session from its recorded phase. |
-| `--force` | Permit overwriting an existing chapter. Prints the destructive action and requires confirmation. |
+| `--dry-run` | Assemble context, print the exact prompt, exit before any API call — and before providers are constructed. Also settable via `DRY_RUN=1`. Output is plain text (no rich markup) so it stays diffable. |
+| `--chapter N` | Override manifest target selection; must name an existing manifest row (`resolve_target`), never invents one. Refuses if chapter N already exists unless `--force`. |
+| `--resume` | Continue an interrupted session from its recorded phase. *(Phase 6 — not yet implemented.)* |
+| `--force` | Permit replacing an existing chapter. Prints the destructive action and requires typing `replace`; with no TTY attached it refuses closed (non-interactive force arrives with the automation phase). |
+
+**Exit codes:** 0 on a drafted chapter or dry-run; 1 on refusals
+(existing chapter without force, failed confirmation) and on an
+all-routes-exhausted session (whose ADR-0005 stub and audit JSON are
+still written first). Config/validation errors exit 1 via the shared
+error handler.
+
+**Audit JSON** is written to `log/sessions/<session-id>.json` on every
+real run (never on dry-runs): session id, book slug, chapter number,
+POV, beat, final phase, assigned/actual model, fallback flag,
+continuation rounds, token totals, and one record per call attempt.
+
+*(Status as of 2026-08-26: `new-book` and `write-session` are fully
+implemented; `check-style` is a stub until Phase 4; `--resume` waits
+for the Phase 6 state machine.)*
 
 `--dry-run` is not a nicety. Prompt tuning is the highest-iteration activity
 in the project and the free-tier quota is the hardest constraint on it;

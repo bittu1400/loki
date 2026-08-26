@@ -391,3 +391,20 @@ A re-run with `--force` replaces the stub with a real attempt.
 - **Quarantine directory for stubs.** Cleaner vault hygiene, but splits
   the "one chapter number, one file" rule that makes the vault legible.
 
+### Implementation note (2026-08-26, Session 5)
+
+Implemented in `drafting/generate.py::_write_failed_stub` with two
+deliberate refinements, recorded so the ADR and code do not drift:
+
+- `fallback_triggered` is written as `false`, not `true` — on a terminal
+  failure nothing ever succeeded, so "fallback fired" would be a lie.
+  The stub instead carries the terminal outcome in its body (last error
+  per provider attempted) and an empty `actual_model`.
+- The session exits 1 after writing the stub and audit JSON, so
+  automation observes failure while the artifact still exists.
+
+Verified against live providers via fakes:
+`test_all_routes_exhausted_writes_stub_manifest_untouched`,
+`test_permanent_failure_never_walks_the_chain`,
+`test_stub_replaced_by_rerun_with_overwrite`.
+

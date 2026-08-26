@@ -282,11 +282,19 @@ Verified before a phase is marked complete in [progress.md](progress.md).
 - [x] Keys read from environment only; never a default, never a literal
 - [x] Permanent failures do not trigger fallback
 
-**Phase 3 — drafting**
-- [ ] Continuation loop is hard-capped
-- [ ] Chapter writes refuse to overwrite without explicit `--force`
-- [ ] All-providers-failed terminal case writes a marked `failed-stub`
+**Phase 3 — drafting** *(all verified 2026-08-26, Session 5)*
+- [x] Continuation loop is hard-capped
+      (`max_continuation_rounds` from pipeline.yaml; test:
+      `test_continuation_hard_capped_and_short_draft_still_accepted`)
+- [x] Chapter writes refuse to overwrite without explicit `--force`
+      (`vault.write_chapter` refuses; CLI additionally requires typed
+      interactive confirmation, and refuses closed with no TTY;
+      verified live: `--chapter 3` exits 1)
+- [x] All-providers-failed terminal case writes a marked `failed-stub`
       chapter, manifest stays `planned`, zero API cost (ADR-0005)
+      (`test_all_routes_exhausted_writes_stub_manifest_untouched`;
+      permanent failure additionally short-circuits the chain —
+      `test_permanent_failure_never_walks_the_chain`)
 
 **Phase 5 — editorial** *(blocked on OQ-01)*
 - [ ] Delta schema-validated before any write

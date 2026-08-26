@@ -276,33 +276,44 @@ author-owned per §3.
 src/novel_engine/
   __init__.py
   cli/
-    write_session.py     # single-chapter session entry point
+    write_session.py     # single-chapter session: dry-run, force gate, audit JSON
     new_book.py          # scaffolds a blank vault/<slug>/ and exits
   core/
-    config.py            # Pydantic settings; models.yaml + pipeline.yaml
-    vault.py             # markdown + frontmatter IO; safe append primitives
-    outline.py           # chapter-manifest parsing; next-target selection
-    context_builder.py   # bounded assembly, retrieval, token budgeting
-    state_machine.py     # status transitions, resume, idempotency
+    config.py            # Pydantic settings; models.yaml + pipeline.yaml + startup validation
+    vault.py             # THE ONLY WRITER: scaffold_book, write_chapter,
+                         #   flip_manifest_status, generated_hash
+    outline.py           # manifest parsing; next_target(), resolve_target()
+    context_builder.py   # fact parsing/retrieval by entity; verbatim tail;
+                         #   template slot filling in file order
+    errors.py            # NovelEngineError, ConfigError, ContextError, VaultError
+    state_machine.py     # STUB — Phase 6
   providers/
-    base.py              # abstract provider; normalised outcome types
-    gemini.py
-    openrouter.py
-    groq.py
-    router.py            # fallback chain, backoff with jitter
+    base.py              # abstract provider; five normalised outcome types
+    openai_compat.py     # shared OpenAI-shaped client (openrouter/groq/mistral/nvidia/aihubmix)
+    gemini.py            # generateContent adapter
+    openrouter.py groq.py mistral.py nvidia.py aihubmix.py   # base URLs + build()
+    router.py            # fallback chain; rate-limit-only in-place retries; jitter
+    audit.py             # CallRecord / CallRecorder / allowlist logging
   drafting/
-    generate.py          # one chapter + continuation loop
-    provenance.py        # frontmatter construction
+    generate.py          # draft_chapter(): continuation loop, ADR-0005 failed-stub
+    provenance.py        # make_session_id, chapter_frontmatter, utc_timestamp
   quality/
-    style_checks.py      # pure-Python deterministic metrics
+    style_checks.py      # STUB — Phase 4
   editorial/
-    schema.py            # Pydantic models for the delta
-    pass_runner.py       # prompt, call, validate, repair-retry, fail closed
-    reconciler.py        # deterministic append-only application
+    schema.py            # STUB — Phase 5 delta models
+    pass_runner.py       # STUB — Phase 5 prompt/call/validate/fail-closed
+    reconciler.py        # STUB — Phase 5 append-only application
+templates/book/          # packaged scaffolder source (vault templates)
 vault/
-  example-book/          # committed fixture (ADR-0004)
-tests/
+  example-book/          # committed fixture (ADR-0004); chapters 001-004 on disk,
+                         #   001-002 hand-written fixtures, 003-004 generated live
+tests/                   # fakes.py holds the scripted Provider doubles
 ```
+
+Layout rationale: `providers/` knows nothing about novels, `quality/` and
+`editorial/` know nothing about HTTP, and `vault.py` is the only module that
+writes to disk. That last constraint is what makes the authority model in §3
+enforceable rather than aspirational.
 
 Layout rationale: `providers/` knows nothing about novels, `quality/` and
 `editorial/` know nothing about HTTP, and `vault.py` is the only module that

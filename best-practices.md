@@ -38,10 +38,15 @@ write to disk. Everything else returns data. This is what makes the
 authority model in [architecture.md](architecture.md) §3 enforceable rather
 than aspirational — a reviewer checks one file, not the whole tree.
 
-**Append primitives.** `vault.py` exposes `append_fact()`,
-`append_summary()`, `append_thread()`, `flip_thread_status()`. It exposes no
-general "write canon file" function. If a caller wants to overwrite canon,
-there must be no API for it.
+**Narrowly-scoped primitives.** `vault.py` exposes only what a phase
+needs, each refusing everything else: as of Phase 3, `scaffold_book`,
+`write_chapter` (create-only, hash-verified), and
+`flip_manifest_status` (single-cell mechanical edit). The append
+primitives the editorial reconciler will need — `append_fact()`,
+`append_summary()`, `append_thread()`, `flip_thread_status()` — arrive in
+Phase 5. It exposes no general "write canon file" function, and if a
+caller wants to overwrite canon there must be no API for it beyond the
+one explicit opt-in `write_chapter` already gates.
 
 **Layering.** `providers/` knows nothing about novels. `quality/` and
 `editorial/` know nothing about HTTP. `cli/` contains no logic, only

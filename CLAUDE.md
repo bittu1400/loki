@@ -104,9 +104,16 @@ ADR, never a shortcut.
 
 - **`core/vault.py` is the only module that writes to disk.** Everything
   else returns data. This is what makes the authority model reviewable.
-- **`vault.py` exposes append primitives only** — `append_fact`,
-  `append_summary`, `append_thread`, `flip_thread_status`. There is
-  deliberately no general "write canon file" function.
+- **`vault.py` exposes narrowly-scoped primitives only** — as of Phase 3:
+  `scaffold_book`, `write_chapter` (create-only, hash-verified), and
+  `flip_manifest_status` (single-cell mechanical edit). The append
+  primitives the editorial reconciler will need — `append_fact`,
+  `append_summary`, `append_thread`, `flip_thread_status` — are Phase 5
+  work. There is deliberately no general "write canon file" function.
+- **`generated_hash` is computed by `vault.write_chapter`, never by its
+  callers** — callers who supply one are rejected. It hashes the exact
+  post-frontmatter bytes as stored (leading blank lines stripped,
+  trailing newline included), then the file is re-read and verified.
 - **Model IDs, paths, thresholds, and word counts are configuration, never
   literals in code.** `:free` slugs are renamed and pulled without notice.
 - **Chapter numbers come from the manifest in `plot-outline.md`**, never

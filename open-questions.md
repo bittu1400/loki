@@ -260,3 +260,30 @@ checks are free and always run every chapter.
 **Recommendation:** every chapter by default. Add a `pipeline.yaml` knob
 rather than deciding now. The continuity tracker's value degrades quickly if
 contradictions are caught two chapters late.
+
+---
+
+## 🟡 OQ-09 — Do style checks get numeric thresholds, and where do they live?
+
+**Blocks:** Phase 4 Batches 2–3 (threshold comparison + `check-style` CLI).
+Raised 2026-08-26 at Phase 4 planning.
+
+**The situation.** specs.md §14 says thresholds live in each book's
+`style-guide.md` per book, never in code — they are creative choices. The
+example-book style guide currently carries rhythm targets in prose
+("sentence-length mean near 14 words") but no machine-readable threshold
+block for adverb rate, type–token ratio, dialogue ratio, or paragraph
+length. The metrics can be computed without it; the *comparison and
+flagging* layer cannot.
+
+**Scope.** Whether a fixture gains a structured thresholds block (e.g. a
+`<!-- THRESHOLDS -->` delimited section parsed like the manifest), what
+its exact keys are, and whether absent thresholds mean "report metric,
+skip verdict" or "apply built-in defaults" (the latter would violate the
+thresholds-live-in-config rule).
+
+**Recommendation:** delimited block in style-guide.md, parsed with the
+same marker discipline as MANIFEST/FACTS; absent block ⇒ metrics are
+reported, verdicts are skipped. Keeps thresholds author-owned and makes
+"no thresholds yet" an explicit, visible state rather than hidden
+defaults.

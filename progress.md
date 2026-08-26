@@ -26,7 +26,7 @@ routing is **unchanged from Session 3** for drafting
 (openrouter:minimax-m3:free primary, nvidia → groq fallbacks) and
 editorial (gemini flash-lite → mistral-large). The aihubmix fallback slot
 added earlier on Session 4 was **removed again the same day** after its
-free tier proved to be ~10 lifetime requests unrecharged. 67 tests pass,
+free tier proved to be ~10 lifetime requests unrecharged. 132 tests pass,
 ruff clean.
 
 ---
@@ -87,17 +87,33 @@ ruff clean.
 
 ### Verified
 
-- [x] 131 tests pass; ruff clean (after every batch)
+- [x] 132 tests pass; ruff clean (after every batch; one more added when
+      `DRY_RUN=1` support closed a specs §15 gap in the code)
 - [x] All Phase 3 exit criteria ticked, including the two live-provider
       items and the simulated failure paths (fakes)
 - [x] threat-model §6 Phase 3 items: capped loop tested, overwrite
       refusal tested live
 
+**End-of-session doc pass (this session's closing batch):**
+
+- decisions.md #13–20 recorded: loud-fail canon reads, retrieval rule,
+  generated_hash stored-bytes ownership, byte-surgical flips, two-layer
+  overwrite protection, plain-print dry-run, exit-code policy, fixture
+  growth + test decoupling
+- specs.md §3 (hash convention as implemented, failed-stub fields) and
+  §15 (flag behaviours, exit codes, audit JSON shape) reconciled with
+  code; the one mismatch found (`DRY_RUN=1` promised but unimplemented)
+  was fixed in code, not bent in docs (+1 test)
+- architecture.md §8 module map rewritten to the exact file list;
+  threat-model §6 Phase 3 checklist items ticked with evidence
+- open-questions.md OQ-09 added (style thresholds — blocks Phase 4
+  Batches 2–3)
+
 ### Not done / not attempted
 
-- Phase 4 (style checks): nothing started
+- Phase 4 (style checks): nothing started beyond planning notes below
 - No next-step.md state machine wiring (Phase 6 concern)
-- Nothing pushed to any remote
+- Nothing left unpushed: all commits are on origin/main
 
 ---
 
@@ -173,10 +189,13 @@ downstream treats stubs as absent. Implementation is Phase 3 Batch 3 work.
 ### Read first
 
 1. This file, CLAUDE.md
-2. [specs.md](specs.md) §14 (metrics table) and §15 (`check-style` flags)
-3. Pitfalls B3 (measure, don't ask a model) and B5 (author-edit diff via
+2. decisions.md #13–20 (Session 5 implementation decisions — do not
+   relitigate; especially the retrieval rule and overwrite gating)
+3. [specs.md](specs.md) §14 (metrics table) and §15 (`check-style` flags)
+4. Pitfalls B3 (measure, don't ask a model) and B5 (author-edit diff via
    generated_hash — feeds suggested style-guide additions)
-4. [architecture.md](architecture.md) §7 (quality loops)
+5. [architecture.md](architecture.md) §7 (quality loops)
+6. open-questions.md OQ-09 (thresholds decision — resolve before Batch 2)
 
 ### What now exists (module map)
 
@@ -190,14 +209,30 @@ src/novel_engine/
                         #   generated_hash, split_chapter_file, chapter_path
   core/errors.py        # NovelEngineError, ConfigError, ContextError, VaultError
   core/state_machine.py # STUB — Phase 6 work
-  drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs
+  drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs,
+                        #   AttemptRecord/DraftResult, continuation_prompt()
   drafting/provenance.py# make_session_id, chapter_frontmatter, utc_timestamp
-  providers/*           # unchanged since Session 4
+  providers/*           # unchanged since Session 4 (base, openai_compat,
+                        #   gemini, openrouter, groq, mistral, nvidia,
+                        #   aihubmix, router, audit)
   cli/new_book.py       # uv run new-book --slug X [--vault-root D]
-  cli/write_session.py  # WORKING: --book --chapter --dry-run --force
+  cli/write_session.py  # WORKING: --book --chapter --dry-run --force;
+                        #   DRY_RUN=1 env var; typed overwrite confirmation;
+                        #   audit JSON; exit 1 on refusals + failed-stub
   quality/style_checks.py # STUB — Phase 4 next session
-vault/example-book/     # fixture; chapters 001-004 exist, next planned: NONE
+  editorial/{schema,pass_runner,reconciler}.py # STUBS — Phase 5 work
+templates/book/         # packaged scaffolder source
+vault/example-book/     # fixture: chapters 001-002 hand-written, 003-004
+                        #   generated live in Session 5; manifest fully
+                        #   written (no planned rows left)
+tests/fakes.py          # FakeProvider, full_providers, text_of,
+                        #   reset_fixture_state — shared doubles
 ```
+
+NOTE: the fixture manifest is now fully written (001-004). To exercise
+drafting paths again, add a ch-005 row to plot-outline.md first.
+Tests never depend on live fixture state: reset_fixture_state() forces
+any copied book back to "001-002 written, 003 planned".
 
 NOTE: the fixture manifest is now fully written (001-004). To exercise
 drafting paths again, add a ch-005 row to plot-outline.md first.
