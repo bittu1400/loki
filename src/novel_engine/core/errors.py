@@ -11,6 +11,15 @@ class NovelEngineError(Exception):
     """Base class for every error this project raises."""
 
 
+class ContextError(NovelEngineError):
+    """A vault file the context builder reads is malformed or incomplete.
+
+    Raised before any API call. Messages name the file, the offending
+    line, and what would fix it — reading canon fails loudly rather than
+    prompting a model with silently wrong context.
+    """
+
+
 class ConfigError(NovelEngineError):
     """Configuration is missing, malformed, or inconsistent.
 
