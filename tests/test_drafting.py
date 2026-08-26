@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from fakes import FakeProvider, full_providers, text_of
+from fakes import FakeProvider, full_providers, reset_fixture_state, text_of
 from novel_engine.core.config import load_book_config
 from novel_engine.core.errors import VaultError
 from novel_engine.core.outline import parse_manifest
@@ -44,6 +44,7 @@ FAKE_ENV = {
 def book(tmp_path: Path):
     copied = tmp_path / "example-book"
     shutil.copytree(FIXTURE, copied)
+    reset_fixture_state(copied)
     config = load_book_config(copied.parent, "example-book", env=FAKE_ENV)
     # Small word target so fakes stay tiny; one continuation round only.
     pipeline = config.pipeline.model_copy(

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from fakes import FakeProvider, full_providers, text_of
+from fakes import FakeProvider, full_providers, reset_fixture_state, text_of
 from novel_engine.cli.write_session import run_session
 from novel_engine.core.outline import parse_manifest
 from novel_engine.providers.base import RateLimited, Success
@@ -35,6 +35,7 @@ def vault(tmp_path: Path) -> Path:
     copied = tmp_path / "vault"
     copied.mkdir()
     shutil.copytree(FIXTURE, copied / "example-book")
+    reset_fixture_state(copied / "example-book")
     return copied
 
 
@@ -145,15 +146,10 @@ def test_full_run_writes_chapter_audit_and_flips_manifest(book) -> None:
     assert payload["calls"][0]["provider"] == "openrouter"
 
 
-PREEXISTING_SESSIONS = ("sess-20260820-1930-c41a.json", "sess-20260822-0915-b7e2.json")
-
-
 def new_session_files(vault_root: Path) -> list[Path]:
-    """Session JSONs created by the run — the fixture ships two already."""
-    directory = vault_root / "example-book/log/sessions"
-    return sorted(
-        p for p in directory.glob("sess-*.json") if p.name not in PREEXISTING_SESSIONS
-    )
+    """Session JSONs created by the run — reset_fixture_state cleared
+    everything the committed fixture shipped with."""
+    return sorted((vault_root / "example-book/log/sessions").glob("sess-*.json"))
 
 
 def test_all_routes_fail_stub_exit_code_one(book) -> None:

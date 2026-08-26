@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from fakes import reset_fixture_state
 from novel_engine.core.errors import ConfigError, VaultError
 from novel_engine.core.outline import parse_manifest, resolve_target
 from novel_engine.core.vault import (
@@ -24,6 +25,7 @@ FIXTURE = Path(__file__).resolve().parents[1] / "vault" / "example-book"
 def book_root(tmp_path: Path) -> Path:
     copied = tmp_path / "example-book"
     shutil.copytree(FIXTURE, copied)
+    reset_fixture_state(copied)
     return copied
 
 
@@ -96,19 +98,19 @@ def test_write_chapter_missing_directory_fails(tmp_path: Path) -> None:
 # --- resolve_target -----------------------------------------------------------
 
 
-def test_resolve_target_picks_lowest_planned() -> None:
-    entries = parse_manifest((FIXTURE / "canon/plot-outline.md").read_text())
+def test_resolve_target_picks_lowest_planned(book_root: Path) -> None:
+    entries = parse_manifest(read_outline(book_root))
     entry = resolve_target(entries)
     assert (entry.chapter_number, entry.pov) == (3, "ovist-rhoam")
 
 
-def test_resolve_target_override_selects_existing_row() -> None:
-    entries = parse_manifest((FIXTURE / "canon/plot-outline.md").read_text())
+def test_resolve_target_override_selects_existing_row(book_root: Path) -> None:
+    entries = parse_manifest(read_outline(book_root))
     assert resolve_target(entries, override=2).pov == "brannec-tull"
 
 
-def test_resolve_target_override_unknown_chapter() -> None:
-    entries = parse_manifest((FIXTURE / "canon/plot-outline.md").read_text())
+def test_resolve_target_override_unknown_chapter(book_root: Path) -> None:
+    entries = parse_manifest(read_outline(book_root))
     with pytest.raises(ConfigError, match="not in the manifest"):
         resolve_target(entries, override=99)
 
@@ -147,7 +149,7 @@ def test_flip_then_parse_manifest_sees_written(book_root: Path) -> None:
     entries = parse_manifest(read_outline(book_root))
     by_number = {e.chapter_number: e.status for e in entries}
     assert by_number[3] == "written"
-    assert by_number[4] == "planned"
+    assert by_number[2] == "written"
 
 
 def test_flip_refuses_wrong_expected_current(book_root: Path) -> None:

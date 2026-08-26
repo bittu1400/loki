@@ -43,3 +43,47 @@ def full_providers(**named: FakeProvider) -> dict[str, FakeProvider]:
 
 def text_of(words: int, seed: str = "w") -> str:
     return " ".join(f"{seed}{i}" for i in range(words))
+
+
+def reset_fixture_state(book_root) -> None:
+    """Force a copied example-book back to the canonical drafting-test
+    state: chapters 001-002 written, 003 planned, nothing else.
+
+    The committed fixture legitimately grows as real-run verification
+    drafts more chapters into it; tests must not be coupled to that.
+    """
+    from pathlib import Path
+
+    root = Path(book_root)
+
+    # Manifest: 001-002 written, 003 planned, later rows removed.
+    outline = root / "canon" / "plot-outline.md"
+    text = outline.read_text(encoding="utf-8")
+    begin = text.index("<!-- MANIFEST:BEGIN -->")
+    end = text.index("<!-- MANIFEST:END -->")
+    section_lines = text[begin:end].splitlines()
+    rebuilt: list[str] = []
+    for line in section_lines:
+        stripped = line.strip()
+        if not stripped.startswith("| 00"):
+            rebuilt.append(line)  # markers, blanks, header, separator
+            continue
+        number = int(stripped.strip("|").split("|")[0].strip())
+        if number > 3:
+            continue
+        if number == 3:
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            cells[3] = "planned"
+            line = "| " + " | ".join(cells) + " |"
+        rebuilt.append(line)
+    outline.write_text(
+        text[:begin] + "\n".join(rebuilt) + "\n" + text[end:], encoding="utf-8"
+    )
+
+    # Chapters beyond 002 and their session audits do not exist yet.
+    for path in sorted((root / "chapters").glob("chapter-*.md")):
+        number = int(path.stem.removeprefix("chapter-"))
+        if number > 2:
+            path.unlink()
+    for audit in (root / "log" / "sessions").glob("sess-*.json"):
+        audit.unlink()
