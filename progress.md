@@ -4,16 +4,22 @@ Single source of truth for project state. Updated at the end of every
 session. The next session must be able to start from this file alone,
 with no conversational context.
 
-**Last updated:** 2026-08-25 · end of Session 4
+**Last updated:** 2026-08-26 · end of Session 5
 
 ---
 
 ## Current state
 
-**Phase 0 — ✅ complete.**
-**Phase 1 — ✅ complete (Session 2).**
-**Phase 2 — ✅ complete (Session 3), extended in Session 4.**
-**Phase 3 (single-chapter generation) — ⬜ next. Nothing started.**
+**Phases 0–2 — ✅ complete.**
+**Phase 3 (single-chapter generation) — ✅ complete (Session 5), verified
+against live providers.**
+**Phase 4 (deterministic style checks) — ⬜ next. Nothing started.**
+
+The full drafting path works end-to-end: `write-session --book
+example-book` resolves the manifest target, assembles context, drafts via
+minimax-m3 (openrouter → nvidia → groq fallback), writes a hash-verified
+chapter, flips the manifest, and records an audit JSON. Real-run proof:
+chapters 003 and 004 were generated and committed into the fixture.
 
 Provider stack final state after Session 4: six provider modules built;
 routing is **unchanged from Session 3** for drafting
@@ -32,11 +38,66 @@ ruff clean.
 | 0 | Documentation foundation | ✅ complete | — |
 | 1 | Vault templates + config loader + `example-book` fixture | ✅ complete | — |
 | 2 | Provider layer: Gemini, OpenRouter, Groq, Mistral, NVIDIA (+AiHubMix S4, demoted from routing same day) | ✅ complete | — |
-| 3 | Single-chapter generation + continuation loop | ⬜ next | OQ-04 done; real book still needed before generating for real |
-| 4 | Deterministic style checks | ⬜ | — |
+| 3 | Single-chapter generation + continuation loop | ✅ complete (S5) | — |
+| 4 | Deterministic style checks | ⬜ next | — |
 | 5 | Editorial delta pass + reconciler | ⬜ | **OQ-01 (real vaults only)** |
 | 6 | Session state machine + resume | ⬜ | — |
 | — | *Deferred (ADR-0001):* GitHub Actions, approval gate, Cousins endpoint, `new_book.py` interview | ⏸ | — |
+
+---
+
+## Session 5 — 2026-08-26
+
+### Done
+
+**Phase 3 complete in four batches, all committed separately:**
+
+1. **Batch 1 — `core/context_builder.py`**: strict fact-line parsing
+   (malformed line → ContextError, never silently dropped); entity
+   retrieval (POV-scoped + beat-named character facts first, then
+   unscoped facts naming them; capped at max_locked_facts); verbatim
+   previous-chapter tail via regex word spans; summary slicing; banned-
+   phrase extraction; template filling strictly in file order with
+   unknown-slot/value-without-slot failing loudly.
+2. **Batch 2 — vault write primitives + `outline.resolve_target()`**:
+   `write_chapter` create-only with O_EXCL semantics, owns
+   generated_hash (hashes exact stored bytes, re-reads to verify);
+   `flip_manifest_status` byte-surgical single-cell splice with post-write
+   verification; override selects existing manifest rows only.
+3. **Batch 3 — `drafting/generate.py` + provenance**: continuation loop
+   (full prompt + partial draft re-sent, hard-capped), fallback tracking,
+   ADR-0005 failed-stub terminal case, frontmatter per specs §3.
+4. **Batch 4 — `cli/write_session.py`**: --dry-run prints prompt and
+   exits before provider construction; overwrite refusal; --force needs
+   interactive typed confirmation (no TTY → refuse closed); audit JSON;
+   exit 1 on failed-stub.
+
+**Real-run verification (author approved the quota spend):**
+
+- ch-003: 1459 words via openrouter:minimax-m3:free, no fallback,
+  hash verified, audit sess-20260826-0251-f873.
+- ch-004: 1474 words via gemini:gemini-3.5-flash-lite (the second run
+  correctly advanced to the next planned target — this was accidental
+  but exercised exactly the right behaviour).
+- Overwrite refusal confirmed live: `--chapter 3` without `--force`
+  exits 1.
+- Manifest git diff shows only the two status cells changed.
+- Both chapters + audits + manifest flip COMMITTED into the fixture
+  (author decision) so future context runs retrieve a richer vault.
+
+### Verified
+
+- [x] 131 tests pass; ruff clean (after every batch)
+- [x] All Phase 3 exit criteria ticked, including the two live-provider
+      items and the simulated failure paths (fakes)
+- [x] threat-model §6 Phase 3 items: capped loop tested, overwrite
+      refusal tested live
+
+### Not done / not attempted
+
+- Phase 4 (style checks): nothing started
+- No next-step.md state machine wiring (Phase 6 concern)
+- Nothing pushed to any remote
 
 ---
 
@@ -90,132 +151,91 @@ downstream treats stubs as absent. Implementation is Phase 3 Batch 3 work.
 
 ---
 
+
 ## Next session — start here
 
-**Goal: Phase 3 — single-chapter generation + continuation loop.
-Nothing has been started; begin at Batch 1.**
+**Goal: Phase 4 — deterministic style checks (`quality/style_checks.py`
++ `check-style` CLI). Nothing started; begin by reading specs.md §14.**
 
 ### Blocked / waiting on the author
 
-1. Nothing technical blocks Batches 1–4 against `example-book`.
-2. Per ADR-0001/OQ-05.2: the author's real first book is still undefined.
-   Build and test against `example-book`; do NOT run write-session on a
-   real book until that conversation happens.
-3. Optional, non-blocking: author may supply a real Requesty key
-   (must literally start `rqy_`) → then spike its 12 free models first.
+1. Nothing technical blocks Phase 4: it is pure Python over existing
+   chapters, zero API cost.
+2. Style thresholds live in each book's style-guide.md, not in code
+   (specs §14). The example-book style guide currently has rhythm
+   targets but no explicit numeric thresholds for adverb rate,
+   type-token ratio, or dialogue ratio — decide whether the fixture
+   gains a thresholds block (recommended) or checks stay advisory-only
+   with defaults.
+3. Non-blocking: author may still supply a real Requesty key
+   (`rqy_...`) → spike its 12 free models before any routing change.
 
 ### Read first
 
 1. This file, CLAUDE.md
-2. decisions.md #9–12 (provider verdicts — do not relitigate)
-3. [architecture.md](architecture.md) §4 (session flow), §5 (context assembly), §6 (provider layer)
-4. [specs.md](specs.md) §3 (chapter frontmatter), §7–8 (log files), §11 (state machine)
-5. Pitfalls B2 (verbatim tail), B6 (episodic pre-resolution), C5 (length assumption), C7 (NVIDIA key expiry)
-6. [adr.md](adr.md) ADR-0005 (failed-stub terminal case — Batch 3 must implement it)
+2. [specs.md](specs.md) §14 (metrics table) and §15 (`check-style` flags)
+3. Pitfalls B3 (measure, don't ask a model) and B5 (author-edit diff via
+   generated_hash — feeds suggested style-guide additions)
+4. [architecture.md](architecture.md) §7 (quality loops)
 
 ### What now exists (module map)
 
 ```
 src/novel_engine/
-  core/config.py        # BookConfig.load_book_config(vault_root, slug, env) — DONE+TESTED
-                        # KNOWN_PROVIDERS now includes aihubmix
-  core/outline.py       # parse_manifest(), next_target() — DONE+TESTED
-  core/vault.py         # scaffold_book() only; chapter primitives are Phase 3 work
-  core/errors.py        # NovelEngineError, ConfigError
-  providers/base.py     # Outcome taxonomy + Provider ABC
-  providers/openai_compat.py  # serves openrouter/groq/mistral/nvidia/aihubmix
-  providers/gemini.py   # generateContent adapter
-  providers/{openrouter,groq,mistral,nvidia,aihubmix}.py  # base URLs + build()
-  providers/router.py   # Router(providers, routes, retry, generation_params, on_attempt=...)
-  providers/audit.py    # CallRecord / CallRecorder / allowlist logging
-  cli/new_book.py       # WORKING: uv run new-book --slug X [--vault-root D]
-templates/book/         # packaged vault templates (scaffolder source)
-vault/example-book/     # fixture; next planned chapter is ch-003 (ovist-rhoam)
+  core/config.py        # BookConfig.load_book_config(vault_root, slug, env)
+  core/outline.py       # parse_manifest(), next_target(), resolve_target()
+  core/context_builder.py  # parse_facts, select_facts, previous_chapter_tail,
+                        #   recent_summaries, banned_phrases, build_prompt
+  core/vault.py         # scaffold_book, write_chapter, flip_manifest_status,
+                        #   generated_hash, split_chapter_file, chapter_path
+  core/errors.py        # NovelEngineError, ConfigError, ContextError, VaultError
+  core/state_machine.py # STUB — Phase 6 work
+  drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs
+  drafting/provenance.py# make_session_id, chapter_frontmatter, utc_timestamp
+  providers/*           # unchanged since Session 4
+  cli/new_book.py       # uv run new-book --slug X [--vault-root D]
+  cli/write_session.py  # WORKING: --book --chapter --dry-run --force
+  quality/style_checks.py # STUB — Phase 4 next session
+vault/example-book/     # fixture; chapters 001-004 exist, next planned: NONE
 ```
 
-Env keys active in `.env`: gemini, openrouter, groq, mistral, nvidia,
-aihubmix (emergency lane only — ~10-request lifetime cap hit; do NOT put
-it back in routing). Dismissed/commented with reasons: cohere, z.ai,
-cerebras, chutes, siliconflow, nanogpt, fireworks, portkey, requesty.
-Routing truth: `vault/example-book/config/models.yaml`.
+NOTE: the fixture manifest is now fully written (001-004). To exercise
+drafting paths again, add a ch-005 row to plot-outline.md first.
 
-### Batches (proposed — unchanged from Session 3 planning)
+Env keys active in `.env`: gemini, openrouter, groq, mistral, nvidia,
+aihubmix (emergency lane only). Routing truth:
+`vault/example-book/config/models.yaml`.
+
+### Batches (proposed for Phase 4)
 
 Commit after each batch. Do not push.
 
-**Batch 1 — context builder** (`core/context_builder.py`)
-- Fill `config/prompt-template.md` slots IN FILE ORDER (stable→volatile):
-  `{{style_guide}}`, `{{story_bible}}`, `{{character_sheet}}`,
-  `{{locked_facts}}`, `{{banned_phrases}}`, `{{recent_summaries}}`,
-  `{{previous_tail}}`, `{{pov_character}}`, `{{beat}}`,
-  `{{chapter_instructions}}`
-- Locked facts retrieved by entity: select tracker lines whose category
-  touches the POV id or entities named in the beat; cap at
-  `pipeline.yaml context.max_locked_facts`
-- Previous tail = last `context.previous_chapter_tail_words` words of the
-  highest existing chapter, VERBATIM (pitfall B2)
-- Parse FACTS lines with the line grammar from continuity-tracker.md header
+**Batch 1 — metrics module** (`quality/metrics.py`, pure functions):
+banned-phrase hits, sentence-length mean/stdev, adverb rate per 1000,
+type-token ratio, dialogue ratio, repeated openings, paragraph-length
+distribution, em-dash/semicolon rate, word count vs target. No IO.
 
-**Batch 2 — outline target + vault chapter primitive**
-- `outline.next_target()` already exists and is tested; wire it
-- Add a chapter-writing primitive to `core/vault.py` (the one-writer rule
-  means cli/drafting may not open files for writing): create
-  `chapters/chapter-NNN.md` only if it does not exist; refuse overwrite
-  unless told otherwise by the caller. Also flip manifest status via the
-  MANIFEST section's single permitted mechanical edit (status field only)
-- `generated_hash` convention (established Session 2, used by fixture):
-  SHA-256 of everything after frontmatter, leading blank lines stripped
+**Batch 2 — threshold parsing + report**: read optional numeric
+thresholds from style-guide.md; compare and flag; produce a structured
+report dict.
 
-**Batch 3 — drafting loop** (`drafting/generate.py`)
-- Build router from `build_providers(env)` + book's models.yaml routes:
-  pov route first, then fallback_chain
-- Measure words vs `target_words ± word_tolerance`; if short, continuation
-  prompt appends the partial draft and asks to continue; hard-capped at
-  `max_continuation_rounds`
-- Frontmatter per specs §3: BOTH `assigned_model` and `actual_model`
-  (Success.model_id), `fallback_triggered`, `continuation_rounds`,
-  token counts from the outcome, `generated_hash` of body-as-generated
-- **Implement ADR-0005**: when every route is exhausted, still write a
-  clearly-marked failed-stub chapter locally (zero cost, manifest stays
-  `planned`, status `failed-stub`, last error per provider in frontmatter);
-  re-run with `--force` replaces it
-- Word-count reality check (OQ-06/C5): flash-lite undershoots (~78%),
-  mistral large badly (~35%) — continuation loop is load-bearing, not
-  cosmetic
+**Batch 3 — CLI wiring** (`check-style --book <slug> --chapter N`):
+print the report via rich; exit non-zero only on hard errors, never on
+metric values (advisory per specs §14).
 
-**Batch 4 — CLI wiring** (`cli/write_session.py`)
-- Flags per specs §15: `--book --chapter --dry-run --force`; load dotenv
-  before building providers; rich console output; audit records written to
-  `log/sessions/<id>.json` on real runs
-- Dry-run prints assembled prompt and exits BEFORE any provider call
+### Phase 4 exit criteria
 
-### Phase 3 exit criteria
-
-- [ ] `uv run pytest` passes; ruff clean (every session)
-- [ ] `write-session --book example-book --dry-run` prints a complete
-      assembled prompt using the template slots and spends nothing
-- [ ] A full real run against `example-book` produces `chapter-003.md`
-      (next planned target, pov ovist-rhoam) with valid frontmatter, hash
-      matching its body, both model fields recorded, and an audit JSON in
-      `log/sessions/`
-- [ ] Second run without `--force` refuses to overwrite chapter-003
-- [ ] Manifest status flips planned→written for ch-003 and nothing else in
-      plot-outline.md changes (verify with git diff)
-- [ ] Simulated failure: primary route returns RateLimited → fallback fires
-      and `fallback_triggered: true` lands in frontmatter (test with fakes)
-- [ ] Simulated total failure: ALL routes fail → failed-stub chapter per
-      ADR-0005, manifest unchanged (test with fakes)
-- [ ] threat-model §6 Phase 3 checklist items pass (hard-capped loop;
-      overwrite refusal)
-
-Tick only after actually running each item. The real-run item spends 1–4
-requests of the OpenRouter daily cap — do it once, not repeatedly;
-iterate on the prompt with --dry-run first.
+- [ ] pytest passes; ruff clean (every session)
+- [ ] All metrics computed correctly against committed chapters 001-004
+      with hand-computed expected values in tests
+- [ ] check-style runs zero-cost on any existing chapter
+- [ ] No API dependency anywhere in the quality package
 
 ### Do not do next session
 
 - Do not generate against any real book (none exists yet)
 - Do not re-add aihubmix to routing (cap is lifetime, not daily)
-- Do not chase the dismissed providers (chutes/siliconflow/nanogpt/
-  fireworks/portkey) without NEW evidence; reasons are dated in `.env`
-- Do not start Phase 4 because Phase 3 finished early
+- Do not chase the dismissed providers without NEW evidence; reasons are
+  dated in `.env`
+- Do not start Phase 5 (editorial pass) — blocked on OQ-01 real vaults
+- Do not wire next-step.md resume state (Phase 6)
