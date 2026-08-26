@@ -1,0 +1,23 @@
+{
+  "session_id": "sess-20260826-0251-c0ee",
+  "book_slug": "example-book",
+  "chapter_number": 4,
+  "pov": "brannec-tull",
+  "beat": "Sela Vosk names her price for silence, and it is not money.",
+  "final_phase": "draft",
+  "assigned_model": "gemini:gemini-3.5-flash-lite",
+  "actual_model": "gemini:gemini-3.5-flash-lite",
+  "fallback_triggered": false,
+  "continuation_rounds": 0,
+  "input_tokens": 1741,
+  "output_tokens": 1983,
+  "calls": [
+    {
+      "provider": "gemini",
+      "model_id": "gemini-3.5-flash-lite",
+      "outcome": "success",
+      "latency_ms": 11571,
+      "error": null
+    }
+  ]
+}

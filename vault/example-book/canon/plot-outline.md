@@ -16,6 +16,6 @@ knows the other is already inside the same erasure.
 |---------|-----|-----|--------|------|
 | 001 | ovist-rhoam | arc-1 | written | Ovist logs nine pieces of driftglass and finds a spring-tide correction he never wrote. |
 | 002 | brannec-tull | arc-1 | written | Brannec dives a falling glass, finds Office iron sealing the drowned quarter, and tells no one. |
-| 003 | ovist-rhoam | arc-1 | planned | Ovist pulls nine years of countersignature gaps and finds every gap falls on a spring tide. |
-| 004 | brannec-tull | arc-1 | planned | Sela Vosk names her price for silence, and it is not money. |
+| 003 | ovist-rhoam | arc-1 | written | Ovist pulls nine years of countersignature gaps and finds every gap falls on a spring tide. |
+| 004 | brannec-tull | arc-1 | written | Sela Vosk names her price for silence, and it is not money. |
 <!-- MANIFEST:END -->

@@ -1,0 +1,23 @@
+{
+  "session_id": "sess-20260826-0251-f873",
+  "book_slug": "example-book",
+  "chapter_number": 3,
+  "pov": "ovist-rhoam",
+  "beat": "Ovist pulls nine years of countersignature gaps and finds every gap falls on a spring tide.",
+  "final_phase": "draft",
+  "assigned_model": "openrouter:minimax/minimax-m3:free",
+  "actual_model": "openrouter:minimax/minimax-m3:free",
+  "fallback_triggered": false,
+  "continuation_rounds": 0,
+  "input_tokens": 1460,
+  "output_tokens": 1745,
+  "calls": [
+    {
+      "provider": "openrouter",
+      "model_id": "minimax/minimax-m3:free",
+      "outcome": "success",
+      "latency_ms": 26713,
+      "error": null
+    }
+  ]
+}
