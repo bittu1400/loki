@@ -20,6 +20,15 @@ class ContextError(NovelEngineError):
     """
 
 
+class VaultError(NovelEngineError):
+    """A vault write was refused or the vault changed under us.
+
+    Raised by core/vault.py primitives: overwrite refusal, manifest
+    status flips that do not match expectations, or a write whose
+    verification failed. Nothing is half-written when this fires.
+    """
+
+
 class ConfigError(NovelEngineError):
     """Configuration is missing, malformed, or inconsistent.
 

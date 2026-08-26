@@ -139,3 +139,25 @@ def next_target(entries: list[ChapterEntry]) -> int:
             f"{', '.join(map(str, gaps))}. Fix the manifest before running."
         )
     return target
+
+
+def resolve_target(
+    entries: list[ChapterEntry], override: int | None = None
+) -> ChapterEntry:
+    """The manifest row to draft this session.
+
+    `override` (the CLI's --chapter) must name an existing manifest row —
+    it selects, never invents. Without an override, next_target() decides.
+    """
+    if override is not None:
+        for entry in entries:
+            if entry.chapter_number == override:
+                return entry
+        known = ", ".join(str(e.chapter_number) for e in entries)
+        raise ConfigError(
+            f"Requested chapter {override} is not in the manifest "
+            f"(manifest chapters: {known}). Chapter numbers come from "
+            "the manifest, never from the filesystem."
+        )
+    target = next_target(entries)
+    return next(e for e in entries if e.chapter_number == target)
