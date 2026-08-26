@@ -7,21 +7,21 @@ from pathlib import Path
 
 import pytest
 
+from fakes import FakeProvider, full_providers, text_of
 from novel_engine.core.config import load_book_config
 from novel_engine.core.errors import VaultError
 from novel_engine.core.outline import parse_manifest
-from novel_engine.core.vault import split_chapter_file
+from novel_engine.core.vault import generated_hash, split_chapter_file
 from novel_engine.drafting.generate import (
     STUB_MARKER,
     draft_chapter,
     word_count,
 )
 from novel_engine.providers.base import (
-    GenerationRequest,
-    Outcome,
-    Provider,
+    PermanentFailure,
     RateLimited,
     Success,
+    TransientFailure,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "vault" / "example-book"
@@ -38,32 +38,6 @@ FAKE_ENV = {
         "GLM_API_KEY",
     )
 }
-
-
-class FakeProvider(Provider):
-    """Serves a scripted list of outcomes, repeating the last one."""
-
-    name = "fake"
-
-    def __init__(self, *outcomes: Outcome):
-        self.script = list(outcomes)
-        # Repeat the final scripted outcome once the script runs dry.
-        self._default = self.script[-1] if self.script else RateLimited("exhausted")
-        self.calls: list[GenerationRequest] = []
-
-    def generate(self, request: GenerationRequest) -> Outcome:
-        self.calls.append(request)
-        if self.script:
-            return self.script.pop(0)
-        return self._default  # type: ignore[attr-defined]
-
-    def serve(self, *outcomes: Outcome, default: Outcome) -> None:
-        self.script = list(outcomes)
-        self._default = default
-
-
-def text_of(words: int, seed: str = "w") -> str:
-    return " ".join(f"{seed}{i}" for i in range(words))
 
 
 @pytest.fixture
@@ -98,17 +72,6 @@ def entry(book):
 PROMPT = "# This Chapter\n\nPOV: ovist-rhoam\nBeat: test beat."
 
 
-def full_providers(**named: FakeProvider) -> dict[str, FakeProvider]:
-    """Every provider the fixture routes mention; unrouted ones never fire
-    (the Router validates the whole chain up front)."""
-    providers = {
-        name: FakeProvider(RateLimited("unused"))
-        for name in ("openrouter", "nvidia", "groq")
-    }
-    providers.update(named)
-    return providers
-
-
 # --- happy path -------------------------------------------------------------
 
 
@@ -128,7 +91,6 @@ def test_success_writes_chapter_and_flips_manifest(book, entry) -> None:
     assert fields["status"] == "draft"
     assert re.fullmatch(r"sess-\d{8}-\d{4}-[0-9a-f]{4}", fields["session_id"])
     # generated_hash matches the stored body (vault primitive owns it).
-    from novel_engine.core.vault import generated_hash
 
     assert fields["generated_hash"] == generated_hash(body)
 
@@ -183,7 +145,6 @@ def test_rate_limited_primary_falls_back_to_second_route(book, entry) -> None:
 
 
 def test_permanent_failure_never_walks_the_chain(book, entry) -> None:
-    from novel_engine.providers.base import PermanentFailure
 
     fallback_provider = FakeProvider()
     providers = full_providers(
@@ -200,7 +161,6 @@ def test_permanent_failure_never_walks_the_chain(book, entry) -> None:
 
 
 def test_all_routes_exhausted_writes_stub_manifest_untouched(book, entry) -> None:
-    from novel_engine.providers.base import TransientFailure
 
     providers = {
         "openrouter": FakeProvider(RateLimited("quota")),
@@ -223,7 +183,6 @@ def test_all_routes_exhausted_writes_stub_manifest_untouched(book, entry) -> Non
 
 
 def test_stub_replaced_by_rerun_with_overwrite(book, entry) -> None:
-    from novel_engine.providers.base import TransientFailure
 
     dead = {
         "openrouter": FakeProvider(TransientFailure("down")),
