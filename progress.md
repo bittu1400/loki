@@ -4,7 +4,7 @@ Single source of truth for project state. Updated at the end of every
 session. The next session must be able to start from this file alone,
 with no conversational context.
 
-**Last updated:** 2026-08-26 · end of Session 5
+**Last updated:** 2026-08-29 · end of Session 6
 
 ---
 
@@ -14,6 +14,7 @@ with no conversational context.
 **Phase 3 (single-chapter generation) — ✅ complete (Session 5), verified
 against live providers.**
 **Phase 4 (deterministic style checks) — ⬜ next. Nothing started.**
+Session 6 was a provider-evaluation session only; no phase work.
 
 The full drafting path works end-to-end: `write-session --book
 example-book` resolves the manifest target, assembles context, drafts via
@@ -43,6 +44,49 @@ ruff clean.
 | 5 | Editorial delta pass + reconciler | ⬜ | **OQ-01 (real vaults only)** |
 | 6 | Session state machine + resume | ⬜ | — |
 | — | *Deferred (ADR-0001):* GitHub Actions, approval gate, Cousins endpoint, `new_book.py` interview | ⏸ | — |
+
+---
+
+## Session 6 — 2026-08-29
+
+Out-of-phase session. The author added a new provider key and asked which
+of its free models the project could use. No Phase 4 work was started, and
+no code was touched.
+
+### Done
+
+**TokenRouter evaluated and dismissed (decisions.md #21).**
+
+| Finding | Detail |
+|---|---|
+| Base URL | `https://api.tokenrouter.com/v1` — a one-api relay, OpenAI-compatible. |
+| Namespace trap | `api.tokenrouter.**io**` is an unrelated service that rejects these keys and demands `tr_...`. Three of the five hosts probed responded at all; only the `.com` one recognised the key. |
+| Key state | **Dead.** Every call returns `[sk-gec***EZY] 该令牌额度已用尽 … RemainQuota = 0`. |
+| Why free models do not escape it | one-api checks the *token's own* RemainQuota **before** it consults model pricing, so `model_ratio: 0` is not an exemption. Verified with live POSTs against all three zero-priced models, not inferred from the `/models` 401. |
+| Catalog ceiling | 3 of 133 models are $0: `z-ai/glm-5.3-free` (only plausible drafting lane), `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` (nano reasoning — the thinking-block overhead that dismissed Cohere), `stealth/ox-alpha` (unnamed, no metadata, no stability guarantee). Cheapest paid lane `openai/gpt-oss-120b` at ratio 0.0195 — still fails the 0-cost bar. |
+| Verdict | Dismissed even though the quota is repairable (panel → token → unlimited quota). One free model behind a relay whose quota already died once is the AiHubMix shape from #12 and fails the same stability condition. |
+
+Catalog came from the provider's public `/api/pricing` endpoint, which
+needs no auth — worth remembering for future one-api relays: the model
+list is readable even when the key is not usable.
+
+**Docs:** `.env` key commented out with a dated block in the house style
+(decision #8 requires this); decisions.md #21 recorded. Committed as
+`74ee8e1` (docs-only; `.env` is gitignored).
+
+### Verified
+
+- [x] All three free models POSTed live — identical quota rejection
+- [x] Five candidate hosts probed before settling on the `.com` relay
+- [x] Catalog counts (133 total / 3 free) read from the live pricing endpoint
+
+### Not done / not attempted
+
+- Phase 4: still nothing started — this session added no code and no tests
+- Test suite not re-run (no code changed; last known state 132 pass, ruff clean)
+- No routing change, no provider module, no `.env.example` entry — a
+  dismissed provider gets no scaffolding
+- Nothing pushed
 
 ---
 
@@ -271,6 +315,7 @@ metric values (advisory per specs §14).
 - Do not generate against any real book (none exists yet)
 - Do not re-add aihubmix to routing (cap is lifetime, not daily)
 - Do not chase the dismissed providers without NEW evidence; reasons are
-  dated in `.env`
+  dated in `.env` (tokenrouter added 2026-08-29 — its quota being
+  repairable is NOT new evidence; the 3-free-model ceiling is the reason)
 - Do not start Phase 5 (editorial pass) — blocked on OQ-01 real vaults
 - Do not wire next-step.md resume state (Phase 6)
