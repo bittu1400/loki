@@ -33,7 +33,11 @@ def test_fixture_loads_cleanly() -> None:
     config = load_book_config(FIXTURE.parent, "example-book", env=FAKE_ENV)
     assert config.slug == "example-book"
     assert set(config.characters) == {"ovist-rhoam", "brannec-tull", "sela-vosk"}
-    assert [entry.chapter_number for entry in config.manifest] == [1, 2, 3, 4]
+    # The fixture manifest grows as real runs draft into it (decision #20),
+    # so assert its shape, not its length.
+    numbers = [entry.chapter_number for entry in config.manifest]
+    assert numbers[:4] == [1, 2, 3, 4]
+    assert numbers == list(range(1, len(numbers) + 1))
 
 
 def test_missing_book_directory(tmp_path: Path) -> None:

@@ -1,0 +1,23 @@
+{
+  "session_id": "sess-20260831-0714-62d4",
+  "book_slug": "example-book",
+  "chapter_number": 5,
+  "pov": "ovist-rhoam",
+  "beat": "Ovist traces the nine gaps to one countersigning clerk of record and finds the man died six years before half of them were signed.",
+  "final_phase": "draft",
+  "assigned_model": "openrouter:minimax/minimax-m3:free",
+  "actual_model": "openrouter:minimax/minimax-m3:free",
+  "fallback_triggered": false,
+  "continuation_rounds": 0,
+  "input_tokens": 2189,
+  "output_tokens": 1379,
+  "calls": [
+    {
+      "provider": "openrouter",
+      "model_id": "minimax/minimax-m3:free",
+      "outcome": "success",
+      "latency_ms": 46303,
+      "error": null
+    }
+  ]
+}
