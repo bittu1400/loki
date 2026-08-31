@@ -155,7 +155,7 @@ def new_session_files(vault_root: Path) -> list[Path]:
 def test_all_routes_fail_stub_exit_code_one(book) -> None:
     dead = {
         name: FakeProvider(RateLimited("down"))
-        for name in ("openrouter", "nvidia", "groq")
+        for name in ("openrouter", "nvidia", "groq", "local")
     }
     code = run_session(
         "example-book",

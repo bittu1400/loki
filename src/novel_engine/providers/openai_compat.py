@@ -1,7 +1,9 @@
 """OpenAI-compatible chat-completions provider.
 
-Covers OpenRouter, Groq, Mistral, and NVIDIA NIM — all speak the same
-wire format, so one class parameterised by base URL serves four providers.
+Covers OpenRouter, Groq, Mistral, NVIDIA NIM, and the local llama.cpp
+lane — all speak the same wire format, so one class parameterised by base
+URL serves them all. `api_key=None` sends no Authorization header, for
+servers that do not authenticate.
 Status codes map onto the outcome taxonomy; expected API failures are
 Outcomes, never exceptions.
 """
@@ -32,7 +34,7 @@ class OpenAICompatProvider(Provider):
         self,
         name: str,
         base_url: str,
-        api_key: str,
+        api_key: str | None,
         *,
         extra_headers: dict[str, str] | None = None,
         timeout: float = 120.0,
@@ -40,8 +42,10 @@ class OpenAICompatProvider(Provider):
     ) -> None:
         self.name = name
         self._url = base_url.rstrip("/") + "/chat/completions"
+        # A local server does not authenticate; sending an empty bearer
+        # token is worse than sending none.
         self._headers = {
-            "Authorization": f"Bearer {api_key}",
+            **({"Authorization": f"Bearer {api_key}"} if api_key else {}),
             **(extra_headers or {}),
         }
         self._timeout = timeout
@@ -73,6 +77,11 @@ class OpenAICompatProvider(Provider):
                 )
         except httpx.TimeoutException:
             return TransientFailure(message="request timed out")
+        except httpx.ConnectError as exc:
+            # Nothing is listening. Retrying in place will not start a
+            # server, but another provider can still answer — so this is
+            # model-unavailable, not transient (invariant 3).
+            return ModelUnavailable(message=f"cannot reach {self._url}: {exc}")
         except httpx.HTTPError as exc:
             return TransientFailure(message=f"connection error: {exc}")
 

@@ -1,7 +1,8 @@
 """Provider package. Knows nothing about novels.
 
 `build_providers(env)` constructs every provider whose key is present in
-the environment mapping. Providers with missing keys are simply absent —
+the environment mapping, plus the keyless local lane. Providers with
+missing keys are simply absent —
 startup validation (core.config) already guarantees the routes a book
 needs are all satisfiable before any call is made.
 """
@@ -16,6 +17,7 @@ from novel_engine.providers import (
     aihubmix,
     gemini,
     groq,
+    local,
     mistral,
     nvidia,
     openrouter,
@@ -60,6 +62,11 @@ def build_providers(
     gemini_key = env.get("GEMINI_API_KEY", "").strip()
     if gemini_key:
         providers["gemini"] = gemini.GeminiProvider(gemini_key, transport=transport)
+
+    # The local lane needs no key, so it is always constructed. Whether a
+    # server is actually listening is discovered at call time and reported
+    # as ModelUnavailable (ADR-0006).
+    providers["local"] = local.build(env, transport=transport)
     return providers
 
 
@@ -69,6 +76,7 @@ __all__ = [
     "build_providers",
     "gemini",
     "groq",
+    "local",
     "mistral",
     "nvidia",
     "openrouter",

@@ -18,6 +18,7 @@ from novel_engine.drafting.generate import (
     word_count,
 )
 from novel_engine.providers.base import (
+    ModelUnavailable,
     PermanentFailure,
     RateLimited,
     Success,
@@ -167,6 +168,7 @@ def test_all_routes_exhausted_writes_stub_manifest_untouched(book, entry) -> Non
         "openrouter": FakeProvider(RateLimited("quota")),
         "nvidia": FakeProvider(TransientFailure("timeout")),
         "groq": FakeProvider(RateLimited("429 again")),
+        "local": FakeProvider(ModelUnavailable("no server listening")),
     }
     result = draft_chapter(book, entry, PROMPT, providers)
 
@@ -174,7 +176,7 @@ def test_all_routes_exhausted_writes_stub_manifest_untouched(book, entry) -> Non
     assert result.path is not None and result.path.exists()
     body = result.path.read_text()
     assert STUB_MARKER in body
-    assert "groq:openai/gpt-oss-120b" in body  # last error recorded
+    assert "local:gemma-4-12b-it" in body  # last error recorded
     fields, _ = split_chapter_file(body)
     assert fields["status"] == "failed-stub"
     assert fields["actual_words"] == 0
@@ -189,6 +191,7 @@ def test_stub_replaced_by_rerun_with_overwrite(book, entry) -> None:
         "openrouter": FakeProvider(TransientFailure("down")),
         "nvidia": FakeProvider(TransientFailure("down")),
         "groq": FakeProvider(TransientFailure("down")),
+        "local": FakeProvider(ModelUnavailable("no server listening")),
     }
     first = draft_chapter(book, entry, PROMPT, dead)
     with pytest.raises(VaultError, match="Refusing to overwrite"):

@@ -31,9 +31,14 @@ KNOWN_PROVIDERS: dict[str, str] = {
     "mistral": "MISTRAL_API_KEY",
     "nvidia": "NVIDIA_API_KEY",
     "aihubmix": "AIHUBMIX_API_KEY",
+    "local": "",  # keyless (ADR-0006)
     "cohere": "COHERE_API_KEY",
     "zai": "GLM_API_KEY",
 }
+
+#: Providers that need no credential. The local llama.cpp lane authenticates
+#: nothing, so startup validation must not demand a key for it (ADR-0006).
+KEYLESS_PROVIDERS = frozenset({"local"})
 
 REQUIRED_FILES = (
     "canon/story-bible.md",
@@ -235,7 +240,7 @@ def _check_env(models: ModelsConfig, env: Mapping[str, str]) -> None:
         models.editor_model.primary,
         models.editor_model.fallback,
     ]
-    providers = sorted({route.provider for route in routes})
+    providers = sorted({route.provider for route in routes} - KEYLESS_PROVIDERS)
     missing = [
         KNOWN_PROVIDERS[provider]
         for provider in providers

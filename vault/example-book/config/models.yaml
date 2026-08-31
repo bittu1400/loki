@@ -23,7 +23,12 @@ fallback_chain: # applies when a pov_model's provider fails or is rate-limited
   - provider: nvidia
     model: minimaxai/minimax-m3 # same model, independent quota (key expires ~2027-02, see .env)
   - provider: groq
-    model: openai/gpt-oss-120b # fastest; weakest prose = last resort
+    model: openai/gpt-oss-120b # fastest; weakest prose
+  - provider: local
+    model: gemma-4-12b-it # llama.cpp on localhost:8080; ADR-0006. Last resort by
+    # position, not by quality: it passed every style threshold in the 2026-08-31
+    # spike. It is last because that evidence is one prompt and one seed, and
+    # because it is the only lane that dies when a laptop is asleep.
 # aihubmix REMOVED 2026-08-25: its free tier caps unrecharged accounts at
 # ~10 lifetime requests, then returns an abuse-warning string. Failed the
 # stability condition (open-questions.md OQ-04 re-run; decisions.md #12).

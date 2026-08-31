@@ -35,7 +35,7 @@ def full_providers(**named: FakeProvider) -> dict[str, FakeProvider]:
     (the Router validates the whole chain up front)."""
     providers = {
         name: FakeProvider(RateLimited("unused"))
-        for name in ("openrouter", "nvidia", "groq")
+        for name in ("openrouter", "nvidia", "groq", "local")
     }
     providers.update(named)
     return providers

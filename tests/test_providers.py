@@ -184,7 +184,8 @@ def test_build_providers_skips_missing_keys() -> None:
     from novel_engine.providers import build_providers
 
     providers = build_providers({"GEMINI_API_KEY": "g", "GROQ_API_KEY": "q"})
-    assert set(providers) == {"gemini", "groq"}
+    # "local" is always present: it needs no key (ADR-0006).
+    assert set(providers) == {"gemini", "groq", "local"}
 
 
 @pytest.mark.parametrize(
