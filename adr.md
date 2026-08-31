@@ -408,3 +408,63 @@ Verified against live providers via fakes:
 `test_permanent_failure_never_walks_the_chain`,
 `test_stub_replaced_by_rerun_with_overwrite`.
 
+
+
+## ADR-0006 — Local model lane
+
+**Date:** 2026-08-31 · **Status:** accepted · **Session:** 7
+
+### Context
+
+Every provider lane in this project has the same structural weakness:
+someone else decides whether it still exists. AiHubMix's free tier turned
+out to be ~10 lifetime requests (#12). TokenRouter's token quota was dead
+on arrival and its catalog held three zero-priced models (#21). `:free`
+slugs are renamed and pulled without notice — the reason model IDs are
+configuration and never literals in code.
+
+The author has a gemma-4-12b QAT model served locally by llama.cpp. A
+spike drafted the identical ch-003 prompt twice: once as-is, once with a
+rhythm instruction appended. The second draft passed every threshold the
+example-book declares — the only one of three drafts to do so, against a
+committed minimax-m3 chapter that fails on sentence-length mean.
+
+### Decision
+
+Add `providers/local.py` as an OpenAI-compatible provider pointed at the
+local server, and place it at the END of the drafting fallback chain,
+below groq.
+
+Last-resort, not primary. The prose evidence is one prompt, one seed, one
+run. What the lane is being adopted for is availability: it is the only
+route in the stack that no third party can revoke.
+
+### Consequences
+
+- The chain gains a lane that never rate-limits and never costs anything.
+- **It is dead whenever the laptop's server is not running.** Every other
+  lane fails on the network; this one fails on the host. A session that
+  reaches it on a machine with no server gets a connection error, which
+  the router must classify as model-unavailable (fallback-eligible),
+  never as a permanent failure (invariant 3).
+- The server's context window (8192 today) is smaller than the book-wide
+  `token_budget` of 12000. The budget is a per-book creative/config
+  value; the context window is a per-route physical limit. They are
+  different things and the smaller must win at call time.
+- Model identity is weaker than a hosted lane's: whatever GGUF is loaded
+  answers to whatever `model` string is sent. Provenance records what was
+  requested, not what actually ran — a real gap, accepted because the
+  lane is last-resort.
+
+### Alternatives considered
+
+- **Promote above groq.** models.yaml already calls gpt-oss-120b the
+  weakest prose, and gemma+rhythm beat it on every measured metric — but
+  against one prompt and one seed. Rejected until there is more evidence
+  than a single spike.
+- **Primary drafting lane.** Rejected outright: latency is 35–46s on
+  this hardware, quality is unproven across POVs, and the author's
+  standing rule is that routing does not change unless a newcomer
+  clearly beats minimax-m3.
+- **No lane, keep the spike script.** Rejected: a quota emergency is
+  exactly when nobody wants to go find a shell script.
