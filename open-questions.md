@@ -137,6 +137,36 @@ Re-run recommended monthly or whenever a route dies; this roster rots.
 | `nvidia/nemotron-3-ultra:free` | 1587 | 111s | Interesting but broken: overshot by 58%, fragment-heavy rhythm (mean sentence 7.7 words), slow, and **had the driftglass echo speak to Ovist directly — violates power-system.md rule that echoes are not interactive**. |
 | `openai/gpt-oss-120b` (Groq) | 1281 | 5s | Weakest. Exposition via dialogue, repeated tide metaphors, used the city name *Mirek* as a person, inserted Gregorian dates (1843) into an invented calendar. |
 
+**Third run — 2026-08-31, local gemma-4-12b (Session 7).** First spike
+run with the Phase 4 metrics instead of by eye, and the first one that
+changed the prompt rather than the model. Identical ch-003 prompt, local
+llama.cpp (`gemma-4-12B-it-qat-UD-Q4_K_XL`, 8192 ctx), temp 0.9 /
+top_p 0.95 / seed 20260825 as models.yaml specifies.
+
+| Draft | Words | Sentence mean | Stdev | TTR | "He" openings | Thresholds failed |
+|---|---|---|---|---|---|---|
+| minimax-m3 ch-003 (committed) | 1451 | 19.6 | 22.0 | 0.281 | 24 / 74 | 1 (mean high) |
+| gemma-4-12b, prompt as-is | 1389 | 9.7 | 6.3 | 0.354 | 58 / ~143 | 1 (mean low) |
+| gemma-4-12b + rhythm block | 1140 | 12.4 | 7.6 | 0.392 | 35 / ~92 | **0** |
+| minimax-m3 ch-005 + rhythm block (live) | 1128 | 17.1 | 17.5 | 0.335 | 19 / 66 | **0** |
+
+The finding is about the prompt, not the roster: the staccato was fixable
+with an instruction, and the same instruction pulled the long-winded
+model down and the short-winded one up. Recorded as decisions.md #23; the
+block now ships in the packaged prompt template.
+
+Local gemma was adopted as the last-resort drafting fallback for
+availability rather than prose ([ADR-0006](adr.md#adr-0006--local-model-lane)):
+35–46s per draft on this hardware, no quota, no rate limit, and nobody
+else can withdraw it. It is dead whenever the server is not running.
+
+Two things the run surfaced that no metric catches. The banned-phrase
+check matches literal strings, so a descriptive rule like "'symphony'
+applied to anything not musical" did not catch "a recurring silence in
+the music of the Office". And both rhythm-block drafts came in at
+essentially zero dialogue (0.002 and 0.000) — defensible per beat, worth
+watching as a pattern, and an argument for a dialogue_ratio minimum.
+
 **Answers to the four questions:**
 
 1. **Worth automating? Provisionally yes.** Two of four outputs are

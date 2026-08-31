@@ -290,9 +290,11 @@ src/novel_engine/
     state_machine.py     # STUB — Phase 6
   providers/
     base.py              # abstract provider; five normalised outcome types
-    openai_compat.py     # shared OpenAI-shaped client (openrouter/groq/mistral/nvidia/aihubmix)
+    openai_compat.py     # shared OpenAI-shaped client (openrouter/groq/mistral/
+                         #   nvidia/aihubmix/local); api_key=None sends no auth
     gemini.py            # generateContent adapter
     openrouter.py groq.py mistral.py nvidia.py aihubmix.py   # base URLs + build()
+    local.py             # llama.cpp on localhost, keyless, context-clamped (ADR-0006)
     router.py            # fallback chain; rate-limit-only in-place retries; jitter
     audit.py             # CallRecord / CallRecorder / allowlist logging
   drafting/

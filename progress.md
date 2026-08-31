@@ -25,11 +25,13 @@ chapter, flips the manifest, and records an audit JSON. Real-run proof:
 chapters 003 and 004 were generated and committed into the fixture.
 
 `check-style --book example-book --chapter N` now measures any existing
-chapter with no API key present at all. 177 tests pass, ruff clean.
+chapter with no API key present at all. 186 tests pass, ruff clean.
 
-Provider stack unchanged since Session 4: drafting
-openrouter:minimax-m3:free → nvidia → groq; editorial gemini flash-lite
-→ mistral-large. No provider work happened this session.
+Provider stack gained one lane this session (ADR-0006): drafting
+openrouter:minimax-m3:free → nvidia → groq → **local llama.cpp**;
+editorial gemini flash-lite → mistral-large, unchanged. The prompt
+template gained a rhythm block (decision #23), verified live on both
+gemma-4-12b and minimax-m3.
 
 ---
 
@@ -98,7 +100,8 @@ duplicated "Layout rationale" paragraph removed).
 
 ### Verified
 
-- [x] 177 tests pass (132 → 150 → 170 → 177), ruff clean after every batch
+- [x] 186 tests pass (132 → 150 → 170 → 177 for Phase 4, then 186 with the
+      local lane), ruff clean after every batch
 - [x] `check-style --book example-book --chapter 4` run live: 1474 words,
       flags `sentence_length_mean` low and `dialogue_ratio` high, exit 0
 - [x] A test deletes every provider key from the environment and asserts
@@ -109,6 +112,67 @@ duplicated "Layout rationale" paragraph removed).
 - [x] Exit codes: 0 for out-of-band metrics, 1 for missing chapter and
       for a malformed thresholds block
 
+### Addendum — local model spike, rhythm block, local lane (same session)
+
+Author-requested, out of phase: "I have gemma 4 12B loaded locally, try it
+once." It turned into two decisions and one routing change.
+
+**The spike (`/tmp` scratchpad, ephemeral).** Identical ch-003 prompt,
+local llama.cpp on `localhost:8080`, measured with the Phase 4 metrics
+that had just been built. Full table in open-questions.md OQ-04.
+
+| Draft | Words | Sentence mean | "He" openings | Thresholds failed |
+|---|---|---|---|---|
+| minimax-m3 ch-003 (committed) | 1451 | 19.6 | 24 / 74 | 1 |
+| gemma-4-12b, prompt as-is | 1389 | 9.7 | 58 / ~143 | 1 |
+| gemma-4-12b + rhythm block | 1140 | 12.4 | 35 / ~92 | 0 |
+| minimax-m3 ch-005 + rhythm block (live) | 1128 | 17.1 | 19 / 66 | 0 |
+
+**Decision #23 — rhythm block in the prompt template (`548f028`).** The
+staccato was the prompt, not the model. The block now ships in both the
+packaged scaffolder template and the fixture, at the very end of the
+prompt where it was measured. Verified live on minimax-m3 (`aa83831`,
+ch-005): its opposite defect corrected too, 19.6 → 17.1 mean and 1.45x →
+1.13x of target, every threshold met.
+
+**Decision #24 / ADR-0006 — local lane (`548f028`).** `providers/local.py`
+over the existing OpenAI-compatible client, keyless, appended to the
+drafting fallback chain BELOW groq. Adopted for availability, not prose:
+no quota, no rate limit, nobody else can withdraw it. Dead whenever the
+laptop server is not running, which is why it is last.
+
+Implementation notes worth keeping:
+
+- `api_key=None` now means "send no Authorization header" (an empty
+  bearer token is worse than none).
+- A refused connection is `ModelUnavailable`, not `TransientFailure`,
+  across every OpenAI-compatible provider — retrying in place cannot
+  start a server, but another provider can answer. Both are
+  fallback-eligible, so invariant 3 is unaffected; this is about the
+  audit log being truthful.
+- The local provider clamps `max_tokens` to fit the server's context
+  window and refuses before the request leaves the machine when under
+  512 tokens remain. This matters for the continuation loop, which
+  re-sends the full prompt plus the partial draft.
+- `LOCAL_BASE_URL` / `LOCAL_CONTEXT_WINDOW` documented in `.env.example`;
+  `LOCAL_CONTEXT_WINDOW` must match the server's `-c`.
+- Live smoke through our own provider class succeeded. The server echoes
+  the **GGUF file path** as the model ID, so provenance records what was
+  requested, not what ran — the weakness ADR-0006 predicted, confirmed.
+
+**Two gaps this surfaced (neither fixed):**
+
+1. The banned-phrase check matches literal strings, so descriptive rules
+   ("'symphony' applied to anything not musical") do not catch cousins
+   like "a recurring silence in the music of the Office".
+2. Both rhythm-block drafts came in at ~zero dialogue (0.002, 0.000).
+   Defensible per beat, but only `dialogue_ratio`'s upper bound is
+   banded. A minimum would catch it if the pattern holds.
+
+Also noted, not changed: `--dry-run` is refused when the target chapter
+already exists, because the overwrite gate runs first. A dry-run writes
+nothing, so this is stricter than decision #17 requires.
+
 ### Not done / not attempted
 
 - Hand-computed expected values are asserted on a small purpose-built
@@ -116,7 +180,11 @@ duplicated "Layout rationale" paragraph removed).
   committed chapters 001–004 the tests assert invariants and
   frontmatter agreement (`actual_words` vs measured body) plus exact
   flag sets — not a hand-count of all nine metrics per chapter
-- No editorial or Phase 5 work; no provider work; no routing change
+- No editorial or Phase 5 work
+- The local lane's prose evidence is ONE prompt and ONE seed. It has
+  never drafted a brannec-tull chapter, never run through the
+  continuation loop, and never been reached by a real fallback
+- The two gaps above are recorded, not fixed
 - Nothing pushed
 
 ---
@@ -341,7 +409,9 @@ src/novel_engine/
   core/state_machine.py # STUB — Phase 6 work
   drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs
   drafting/provenance.py# make_session_id, chapter_frontmatter, utc_timestamp
-  providers/*           # unchanged since Session 4
+  providers/*           # + local.py (keyless llama.cpp lane, ADR-0006);
+                        #   openai_compat now allows api_key=None and maps
+                        #   connect-refused to ModelUnavailable
   quality/metrics.py    # compute_metrics() + the nine specs §14 metrics as
                         #   pure functions; ChapterMetrics dataclass
   quality/style_checks.py # parse_thresholds, judge, build_report, Threshold,
@@ -354,16 +424,17 @@ src/novel_engine/
                         #   when metrics are out of band
   editorial/{schema,pass_runner,reconciler}.py # STUBS — Phase 5 work
 src/novel_engine/templates/book/  # packaged scaffolder source
-vault/example-book/     # fixture: chapters 001-002 hand-written, 003-004
-                        #   generated live in Session 5; manifest fully
-                        #   written; style-guide.md now carries a
-                        #   THRESHOLDS block (7 banded metrics)
+vault/example-book/     # fixture: 001-002 hand-written, 003-004 generated in
+                        #   Session 5, 005 generated in Session 7 (first draft
+                        #   with the rhythm block); manifest fully written;
+                        #   style-guide.md carries a THRESHOLDS block;
+                        #   models.yaml fallback chain ends with local
 tests/fakes.py          # FakeProvider, full_providers, text_of,
                         #   reset_fixture_state — shared doubles
 ```
 
-NOTE: the fixture manifest is fully written (001-004). To exercise
-drafting paths again, add a ch-005 row to plot-outline.md first.
+NOTE: the fixture manifest is fully written (001-005). To exercise
+drafting paths again, add a ch-006 row to plot-outline.md first.
 Tests never depend on live fixture state: reset_fixture_state() forces
 any copied book back to "001-002 written, 003 planned".
 
@@ -374,8 +445,8 @@ a new book starts untuned and visibly so. If that is ever changed, the
 block must ship commented out, never with numbers.
 
 Env keys active in `.env`: gemini, openrouter, groq, mistral, nvidia,
-aihubmix (emergency lane only). Routing truth:
-`vault/example-book/config/models.yaml`.
+aihubmix (emergency lane only). The local lane needs no key and is always
+built. Routing truth: `vault/example-book/config/models.yaml`.
 
 ### Batches (proposed for Phase 5)
 
@@ -422,3 +493,5 @@ recorded so a failure is diagnosable.
   dated in `.env`
 - Do not wire next-step.md resume state (Phase 6)
 - Do not add built-in threshold defaults to `quality/` (decision #22)
+- Do not promote the local lane above groq on the current evidence — one
+  prompt, one seed (ADR-0006 alternatives)
