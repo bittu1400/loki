@@ -298,13 +298,26 @@ generation_params:
   seed: 20260824        # pinned where the provider supports it; ignored otherwise
 ```
 
-> **Verified reality (2026-08-25, OQ-02/OQ-04):** the Gemini 2.5 family is
+> **Verified reality (updated 2026-08-31):** the Gemini 2.5 family is
 > closed to new keys; `llama-3.3-70b-versatile` no longer exists; the
-> editorial role runs on `gemini-3.5-flash-lite` → `mistral-large`. Five
-> providers are live (gemini, openrouter, groq, mistral, nvidia); cohere,
-> z.ai, and cerebras were tried and dismissed (reasons in `.env.example`).
+> editorial role runs on `gemini-3.5-flash-lite` → `mistral-large`. Six
+> lanes are live: five hosted (gemini, openrouter, groq, mistral, nvidia)
+> plus `local` (ADR-0006). cohere, z.ai, cerebras, aihubmix, and
+> tokenrouter were tried and dismissed (dated reasons in `.env`).
 > Free-tier availability changes without notice — re-verify before trusting
 > any ID, and record a dated comment per entry when you do.
+
+**The `local` provider.** `provider: local` names the llama.cpp lane. It
+takes **no API key** — it is the one member of `KNOWN_PROVIDERS` listed in
+`KEYLESS_PROVIDERS`, so startup validation never demands a credential for
+it, and `build_providers` always constructs it. Its `model` string is sent
+to the server but does not select anything: whatever GGUF is loaded
+answers, and the server echoes back its own file path, so provenance
+records what was *requested*, not what ran. Two optional env overrides,
+both documented in `.env.example`: `LOCAL_BASE_URL` (default
+`http://localhost:8080/v1`) and `LOCAL_CONTEXT_WINDOW` (default 8192),
+which **must** match the server's `-c` — the provider clamps `max_tokens`
+to fit it and refuses the call when under 512 tokens remain to write in.
 
 **`editor_model` has its own fallback, deliberately.** If drafting succeeds
 but editorial reconciliation fails, the correct behaviour is to keep the

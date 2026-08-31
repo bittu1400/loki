@@ -151,6 +151,12 @@ JSON, valid JSON that violates the schema, a delta naming a nonexistent
 thread ID, and a `target_file` of `../../.env`. Each must fail closed and
 write nothing.
 
+**Test both halves of a signal.** A test that only asserts "the hashes
+match" passes just as happily when the author-edit signal is broken. The
+fixture therefore carries a deliberately edited chapter whose hash must
+*not* match (decision #25). Any invariant that exists to detect a
+condition needs a test that the detection actually fires.
+
 **Do not chase coverage.** Prompt assembly, style metrics, and the state
 machine deserve thorough tests. CLI argument plumbing does not.
 

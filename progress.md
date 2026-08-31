@@ -25,7 +25,7 @@ chapter, flips the manifest, and records an audit JSON. Real-run proof:
 chapters 003 and 004 were generated and committed into the fixture.
 
 `check-style --book example-book --chapter N` now measures any existing
-chapter with no API key present at all. 186 tests pass, ruff clean.
+chapter with no API key present at all. **187 tests pass, ruff clean.**
 
 Provider stack gained one lane this session (ADR-0006): drafting
 openrouter:minimax-m3:free → nvidia → groq → **local llama.cpp**;
@@ -100,8 +100,9 @@ duplicated "Layout rationale" paragraph removed).
 
 ### Verified
 
-- [x] 186 tests pass (132 → 150 → 170 → 177 for Phase 4, then 186 with the
-      local lane), ruff clean after every batch
+- [x] 187 tests pass (132 → 150 → 170 → 177 across Phase 4's batches, 186
+      with the local lane, 187 with the author-edit hash test), ruff clean
+      after every batch
 - [x] `check-style --book example-book --chapter 4` run live: 1474 words,
       flags `sentence_length_mean` low and `dialogue_ratio` high, exit 0
 - [x] A test deletes every provider key from the environment and asserts
@@ -194,6 +195,15 @@ plain naming Brannec Tull in Ovist's head against the outline's premise;
 and **ch-005 contradicting itself — "Both of them" then "There were nine"
 against ch-001's two corrections.** That last one is committed in the
 fixture and is a ready-made Phase 5 test case.
+
+**ch-005 contradiction fixed (decision #25).** One sentence rewritten by
+hand so nine countersignings and two corrections stop being the same
+number. `generated_hash` was deliberately **left stale**: specs §3 makes
+it immutable so the mismatch reports "the author edited this" (pitfalls
+B5), and recomputing it to make a test pass would have destroyed the
+Phase 6 signal. `tests/test_vault_writing.py` now asserts both halves of
+that contract — unedited chapters match, `AUTHOR_EDITED_CHAPTERS` must
+not — so a broken edit-detector fails a test instead of passing quietly.
 
 **Two gaps this surfaced (neither fixed):**
 
@@ -418,9 +428,10 @@ the whole design, not commentary.
 
 1. This file, CLAUDE.md (especially invariants 1–3 and the vault
    primitive list)
-2. decisions.md #13–22 — do not relitigate. #15/#16 (hash ownership,
-   byte-surgical flips) are the model the append primitives must follow;
-   #22 is the thresholds rule Phase 4 just implemented
+2. decisions.md #13–25 — do not relitigate. #15/#16 (hash ownership,
+   byte-surgical flips) are the shape the append primitives must copy;
+   #22 is the no-defaults thresholds rule; #23/#24 are the rhythm block
+   and the local lane; #25 is why ch-005's hash is deliberately stale
 3. [specs.md](specs.md) §4 (fact-line grammar — the reconciler must emit
    lines `context_builder.parse_facts` can read back), §5–7 (delta
    schema, editorial pass, reconciliation)
@@ -428,6 +439,10 @@ the whole design, not commentary.
 5. [architecture.md](architecture.md) §3 (authority model) and §6
 6. [threat-model.md](threat-model.md) §6 Phase 5 checklist
 7. [adr.md](adr.md) ADR-0004 (why the fixture is the only safe target)
+   and ADR-0006 (the local lane, its offline dependency, and why its
+   provenance is weaker than a hosted lane's)
+8. pitfalls C8/C9 before touching the local server or enabling reasoning
+   for the editorial pass
 
 ### What now exists (module map)
 
@@ -437,10 +452,11 @@ src/novel_engine/
   core/outline.py       # parse_manifest(), next_target(), resolve_target()
   core/context_builder.py  # parse_facts, select_facts, previous_chapter_tail,
                         #   recent_summaries, banned_phrases, build_prompt
-  core/vault.py         # scaffold_book, write_chapter, flip_manifest_status,
-                        #   generated_hash, split_chapter_file, chapter_path
-                        #   (append_fact/append_summary/append_thread/
-                        #    flip_thread_status are Phase 5 work — not built)
+  core/vault.py         # THE ONLY WRITER. Exactly: scaffold_book,
+                        #   generated_hash, chapter_path, split_chapter_file,
+                        #   write_chapter, flip_manifest_status.
+                        #   append_fact/append_summary/append_thread/
+                        #   flip_thread_status are Phase 5 work — NOT built
   core/errors.py        # NovelEngineError, ConfigError, ContextError, VaultError
   core/state_machine.py # STUB — Phase 6 work
   drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs
@@ -452,7 +468,8 @@ src/novel_engine/
                         #   pure functions; ChapterMetrics dataclass
   quality/style_checks.py # parse_thresholds, judge, build_report, Threshold,
                         #   Verdict, StyleReport, StyleCheckError,
-                        #   COMPARABLE_METRICS
+                        #   COMPARABLE_METRICS, THRESHOLDS_BEGIN/END.
+                        #   No numeric defaults live here, by design
   cli/new_book.py       # uv run new-book --slug X [--vault-root D]
   cli/write_session.py  # --book --chapter --dry-run --force; DRY_RUN=1
   cli/check_style.py    # WORKING: check-style --book X --chapter N
@@ -465,8 +482,17 @@ vault/example-book/     # fixture: 001-002 hand-written, 003-004 generated in
                         #   with the rhythm block); manifest fully written;
                         #   style-guide.md carries a THRESHOLDS block;
                         #   models.yaml fallback chain ends with local
-tests/fakes.py          # FakeProvider, full_providers, text_of,
-                        #   reset_fixture_state — shared doubles
+tests/                  # 16 files, 187 tests. fakes.py holds FakeProvider,
+                        #   full_providers (openrouter/nvidia/groq/local),
+                        #   text_of, reset_fixture_state
+```
+
+Entry points (`pyproject.toml`), all three implemented:
+
+```
+new-book     = novel_engine.cli.new_book:main
+write-session = novel_engine.cli.write_session:main
+check-style  = novel_engine.cli.check_style:main
 ```
 
 NOTE: the fixture manifest is fully written (001-005). To exercise
@@ -475,8 +501,7 @@ Tests never depend on live fixture state: reset_fixture_state() forces
 any copied book back to "001-002 written, 003 planned".
 
 NOTE: `src/novel_engine/templates/book/` ships the scaffolder's
-style-guide template. It
-does NOT yet carry a THRESHOLDS block — deliberately, per decision #22:
+style-guide template. It does NOT carry a THRESHOLDS block — deliberately, per decision #22:
 a new book starts untuned and visibly so. If that is ever changed, the
 block must ship commented out, never with numbers.
 
@@ -507,12 +532,23 @@ not at all, never partially).
 the primitives only, all-or-nothing, with the pre-application state
 recorded so a failure is diagnosable.
 
-### A test case already waiting in the fixture
+### The Phase 5 test case (fixed in the vault, preserved in git)
 
-`chapter-005.md` states the spring-tide page carries "Both" corrections
-and later "nine". `continuity-tracker.md` says two (ch-001, author).
-Nothing in Phase 4 can see this; it is the editorial pass's whole job.
-Use it as the first real delta the reconciler is asked to handle.
+ch-005 contradicted itself — "Both of them" and, twelve paragraphs later,
+"nine corrections on the spring-tide page" — against ch-001's canonical
+two. The prose was **hand-corrected** (decision #25) so the fixture is not
+shipped knowingly wrong.
+
+The case itself is not lost. Recover the original with:
+
+```bash
+git show d518b74:vault/example-book/chapters/chapter-005.md
+```
+
+That text is the first thing the editorial pass should be pointed at: a
+real model-made contradiction against a real locked fact, which no Phase 4
+metric can see. Feed it to the reconciler and confirm the delta names the
+contradiction rather than rewriting the chapter.
 
 ### Phase 5 exit criteria
 
@@ -538,3 +574,10 @@ Use it as the first real delta the reconciler is asked to handle.
 - Do not add built-in threshold defaults to `quality/` (decision #22)
 - Do not promote the local lane above groq on the current evidence — one
   prompt, one seed (ADR-0006 alternatives)
+- Do not enable model reasoning for drafting (pitfalls C9: 2x cost, worse
+  prose, measured). Measuring it for the EDITORIAL pass is legitimate and
+  is an open experiment, not a decision
+- Do not recompute a stale `generated_hash` to make a test pass — the
+  staleness is the author-edit signal (decision #25, pitfalls B5)
+- Do not turn style metrics into a gate. They rank a threshold-passing
+  draft above a better-written one; specs §14 keeps them advisory

@@ -296,6 +296,34 @@ Verified before a phase is marked complete in [progress.md](progress.md).
       permanent failure additionally short-circuits the chain —
       `test_permanent_failure_never_walks_the_chain`)
 
+**Phase 2 addendum — local lane** *(ADR-0006, verified 2026-08-31)*
+- [x] No credential exists to leak: `local` is keyless by design and is
+      the only member of `core.config.KEYLESS_PROVIDERS`
+- [x] `LOCAL_BASE_URL` is operator-supplied configuration only. It is
+      never derived from a prompt, a model response, or vault content —
+      a model must never be able to choose where a request is sent
+- [x] A dead server returns `ModelUnavailable`, so the chain moves on
+      once rather than retrying in place
+      (`test_server_not_running_is_model_unavailable_not_permanent`)
+- [x] `max_tokens` is clamped to the server's context window, and a
+      prompt with under 512 tokens of room is refused **before the
+      request leaves the machine**
+      (`test_prompt_with_no_room_left_refuses_before_calling`)
+
+**Phase 4 — quality** *(all verified 2026-08-31, Session 7)*
+- [x] The whole `quality/` package is offline: no HTTP client, no
+      provider import, no key read. `check-style` deliberately bypasses
+      `load_book_config` (which validates keys) and takes `target_words`
+      from the chapter's own frontmatter
+      (`test_runs_with_no_api_keys_in_the_environment`)
+- [x] A malformed THRESHOLDS block fails loudly rather than falling back
+      to defaults — there are no numeric defaults in code (decision #22;
+      `test_malformed_rows_fail_loudly`, `test_malformed_thresholds_exit_one`)
+- [x] Metrics never gate a chapter: out-of-band values still exit 0
+      (`test_out_of_band_metrics_still_exit_zero`), so no style number can
+      silently block prose
+- [x] `check-style` only ever reads; it has no write path to the vault
+
 **Phase 5 — editorial** *(blocked on OQ-01)*
 - [ ] Delta schema-validated before any write
 - [ ] Append-only enforced in `vault.py`; no edit or delete path to canon

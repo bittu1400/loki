@@ -114,6 +114,21 @@ ADR, never a shortcut.
   callers** — callers who supply one are rejected. It hashes the exact
   post-frontmatter bytes as stored (leading blank lines stripped,
   trailing newline included), then the file is re-read and verified.
+- **A stale `generated_hash` is a feature, not a bug.** The hash is
+  immutable (specs §3): when the author hand-edits a chapter, the
+  mismatch is how the Phase 6 feedback loop learns an edit happened
+  (pitfalls B5). Never "fix" a mismatch by recomputing the hash.
+  `vault/example-book/chapters/chapter-005.md` is deliberately edited and
+  deliberately stale (decision #25); `tests/test_vault_writing.py` asserts
+  both halves — unedited chapters match, edited ones must not.
+- **`quality/` holds no numbers.** `metrics.py` measures and never judges;
+  thresholds live in each book's `canon/style-guide.md` between
+  `THRESHOLDS` markers. A book with no block gets metrics and no verdicts
+  — there are no built-in numeric defaults anywhere in code (decision
+  #22), and adding one would put a creative constant in the engine.
+- **The `local` provider needs no key and is always built.** It is the
+  only entry in `core.config.KEYLESS_PROVIDERS`. A dead server surfaces as
+  `ModelUnavailable` at call time, so the chain moves on (ADR-0006).
 - **Model IDs, paths, thresholds, and word counts are configuration, never
   literals in code.** `:free` slugs are renamed and pulled without notice.
 - **Chapter numbers come from the manifest in `plot-outline.md`**, never
@@ -122,7 +137,12 @@ ADR, never a shortcut.
   destructive paths runs against the committed `vault/example-book/`
   fixture.
 - **Phase 5 is blocked against real vaults** until OQ-01 resolves the
-  missing backup path.
+  missing backup path. It may be built and run against
+  `vault/example-book/`, which git can restore.
+- **Reasoning/thinking stays OFF for drafting.** Measured 2026-08-31: 2x
+  tokens, 2x wall time, worse prose, and the only draft that broke the
+  fourth wall (pitfalls C8/C9). A local GGUF's chat template — not our
+  code — decides this; read `/props` before trusting a local lane.
 
 ---
 

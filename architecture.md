@@ -252,14 +252,24 @@ Three provider-specific realities the layer must absorb:
 Continuity is checked. Craft is not — unless we build for it. Two loops
 exist for that.
 
-**Deterministic style checks (Phase 4).** Asking an LLM "does this violate
-the style guide?" produces agreeable mush. These signals are computable in
-Python at zero API cost and are far sharper: banned-phrase and banned-pattern
-hits, sentence-length distribution, adverb rate, type-token ratio,
-dialogue-to-narration ratio, paragraph-length distribution, and repeated
-sentence openings. The LLM editorial pass is then reserved for the one job
-where it genuinely has an edge — detecting contradiction against locked
-facts. This also conserves the tightest-rationed quota in the stack.
+**Deterministic style checks (Phase 4 — built).** Asking an LLM "does this
+violate the style guide?" produces agreeable mush. These signals are
+computable in Python at zero API cost and are far sharper: banned-phrase and
+banned-pattern hits, sentence-length distribution, adverb rate, type-token
+ratio, dialogue-to-narration ratio, paragraph-length distribution, and
+repeated sentence openings. The LLM editorial pass is then reserved for the
+one job where it genuinely has an edge — detecting contradiction against
+locked facts. This also conserves the tightest-rationed quota in the stack.
+
+**What these checks cannot see, measured 2026-08-31.** Five drafts of the
+same chapter were measured and then read. The metrics ranked a
+threshold-passing draft first; reading ranked it third. They caught none of
+the three real defects: prose that referred to "Chapter 1" out loud, a POV
+character described from outside his own head, and a chapter contradicting
+canon within twelve paragraphs. The metrics measure AI-prose *tells*, not
+quality — which is why specs §14 keeps them advisory, and why promoting
+them to a gate would be a mistake dressed as rigour. Contradiction is the
+editorial pass's job (§6); voice is the author's.
 
 **The author-edit feedback loop (Phase 6+).** When the author edits a
 generated chapter, that diff is the highest-quality voice signal the system

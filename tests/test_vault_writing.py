@@ -32,12 +32,33 @@ def book_root(tmp_path: Path) -> Path:
 # --- generated_hash convention ----------------------------------------------
 
 
+#: Fixture chapters deliberately edited by hand after generation. Their
+#: hashes are SUPPOSED to be stale — specs §3 makes generated_hash immutable
+#: precisely so the mismatch reports "the author edited this" (decision #25).
+AUTHOR_EDITED_CHAPTERS = {5}
+
+
 def test_fixture_chapter_hashes_match_convention() -> None:
     """The convention established in Session 2 must still hold for every
     committed fixture chapter — it is the contract write_chapter keeps."""
     for path in sorted((FIXTURE / "chapters").glob("chapter-*.md")):
         fields, body = split_chapter_file(path.read_text(encoding="utf-8"))
+        if fields["chapter_number"] in AUTHOR_EDITED_CHAPTERS:
+            continue
         assert fields["generated_hash"] == generated_hash(body)
+
+
+def test_author_edited_chapter_reports_a_stale_hash() -> None:
+    """The other half of the contract: an edited chapter MUST NOT match.
+
+    This is the author-edit signal the Phase 6 feedback loop reads
+    (pitfalls B5). A test that only ever asserted "hashes match" would
+    pass just as happily if the signal were broken.
+    """
+    for number in sorted(AUTHOR_EDITED_CHAPTERS):
+        path = FIXTURE / "chapters" / f"chapter-{number:03d}.md"
+        fields, body = split_chapter_file(path.read_text(encoding="utf-8"))
+        assert fields["generated_hash"] != generated_hash(body)
 
 
 def test_generated_hash_is_stable_and_prefixed() -> None:
