@@ -263,7 +263,7 @@ contradictions are caught two chapters late.
 
 ---
 
-## 🟡 OQ-09 — Do style checks get numeric thresholds, and where do they live?
+## ~~🟡 OQ-09 — Do style checks get numeric thresholds, and where do they live?~~ — RESOLVED 2026-08-31
 
 **Blocks:** Phase 4 Batches 2–3 (threshold comparison + `check-style` CLI).
 Raised 2026-08-26 at Phase 4 planning.
@@ -287,3 +287,8 @@ same marker discipline as MANIFEST/FACTS; absent block ⇒ metrics are
 reported, verdicts are skipped. Keeps thresholds author-owned and makes
 "no thresholds yet" an explicit, visible state rather than hidden
 defaults.
+
+**RESOLVED 2026-08-31 (decisions.md #22):** recommendation adopted as
+written. `<!-- THRESHOLDS -->` block in `style-guide.md`; no block ⇒
+metrics reported, verdicts skipped; no numeric defaults in code. The
+example-book fixture gains a block so Batches 2–3 are testable.
