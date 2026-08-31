@@ -14,7 +14,7 @@ def test_package_imports() -> None:
     [
         ("novel_engine.cli.new_book", "main"),
         ("novel_engine.cli.write_session", "main"),
-        ("novel_engine.quality.style_checks", "main"),
+        ("novel_engine.cli.check_style", "main"),
     ],
 )
 def test_console_entry_points_resolve(module: str, attr: str) -> None:

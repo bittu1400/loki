@@ -193,8 +193,3 @@ def build_report(
         verdicts=judge(metrics, thresholds),
         thresholds_present=bool(thresholds),
     )
-
-
-def main() -> None:
-    """check-style entry point; CLI wiring is Phase 4 Batch 3."""
-    raise NotImplementedError("check-style CLI arrives in Phase 4 Batch 3")

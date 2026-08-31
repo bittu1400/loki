@@ -15,7 +15,7 @@ dependencies = [
 [project.scripts]
 new-book = "novel_engine.cli.new_book:main"
 write-session = "novel_engine.cli.write_session:main"
-check-style = "novel_engine.quality.style_checks:main"
+check-style = "novel_engine.cli.check_style:main"
 
 [dependency-groups]
 dev = [
