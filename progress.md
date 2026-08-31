@@ -181,6 +181,20 @@ send `chat_template_kwargs`, and llama.cpp returns reasoning in a
 separate `reasoning_content` field, so a chapter body could never have
 been polluted by it.
 
+**Read-through of all five drafts (author-requested).** Craft ranking:
+minimax ch-005 (rhythm) > minimax ch-003 > gemma+rhythm > gemma plain >
+gemma+thinking. The metrics ranked gemma+rhythm FIRST and minimax ch-003
+below it — the opposite order. Metrics catch AI-prose tells, not quality;
+a draft can pass every threshold while over-explaining its own theme.
+Concrete support for specs §14 keeping them advisory forever.
+
+Three defects only reading caught: gemma+thinking referring to "Chapter 1"
+inside the prose and describing the POV's own hair from outside; gemma
+plain naming Brannec Tull in Ovist's head against the outline's premise;
+and **ch-005 contradicting itself — "Both of them" then "There were nine"
+against ch-001's two corrections.** That last one is committed in the
+fixture and is a ready-made Phase 5 test case.
+
 **Two gaps this surfaced (neither fixed):**
 
 1. The banned-phrase check matches literal strings, so descriptive rules
@@ -492,6 +506,13 @@ not at all, never partially).
 **Batch 4 — `editorial/reconciler.py`**: apply a validated delta through
 the primitives only, all-or-nothing, with the pre-application state
 recorded so a failure is diagnosable.
+
+### A test case already waiting in the fixture
+
+`chapter-005.md` states the spring-tide page carries "Both" corrections
+and later "nine". `continuity-tracker.md` says two (ch-001, author).
+Nothing in Phase 4 can see this; it is the editorial pass's whole job.
+Use it as the first real delta the reconciler is asked to handle.
 
 ### Phase 5 exit criteria
 

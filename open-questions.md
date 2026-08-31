@@ -193,6 +193,41 @@ Phase 5 editorial pass, where the deliverable is a judgement about
 contradiction rather than prose — but that is a Phase 5 experiment, not a
 routing change now.
 
+**Read-through, 2026-08-31 (all five drafts, by eye).** The metrics and
+the reading disagree, which is the most useful thing this spike produced.
+
+Craft ranking: minimax ch-005 (rhythm) > minimax ch-003 > gemma+rhythm >
+gemma plain > gemma+thinking. Metric ranking put gemma+rhythm first (zero
+thresholds failed) and minimax ch-003 below it (one failed).
+
+The metrics measure AI-prose *tells* — rhythm, repetition, vocabulary
+spread. A draft can clear all of them and still be thematically
+over-explained and dramatically inert, which is what gemma+rhythm is:
+"The Office was not just a record-keeper; it was a gardener", then a
+paragraph extending the metaphor. minimax fails a threshold and is far
+better, because it stages a discovery physically and lets a minor
+character puncture the POV's register ("It's a person standing up.").
+This is the concrete argument for specs §14 keeping metrics advisory and
+never letting them gate a chapter.
+
+Three defects no metric caught, all found only by reading:
+
+- **gemma+thinking breaks the fourth wall**: "the corrections he had
+  found in Chapter 1". It also describes "the salt-grey of his hair" from
+  outside a third-limited POV. The reasoning draft was the worst of the
+  five despite its trace checking every rule by name.
+- **gemma plain drifts on canon**: puts "A man named Brannec Tull,
+  perhaps" in Ovist's head, when the outline's premise is that neither
+  man knows the other.
+- **minimax ch-005 contradicts itself internally**: "The corrections were
+  there. Both of them." and later "There were nine. Nine corrections on
+  the spring-tide page." Canon (ch-001) says two. This is a ready-made
+  test case for the Phase 5 editorial pass — the exact failure class it
+  exists to catch, sitting in the committed fixture.
+
+The rhythm block did not cost minimax anything in voice: ch-005 is the
+strongest chapter in the vault and 22% shorter than ch-003.
+
 **Answers to the four questions:**
 
 1. **Worth automating? Provisionally yes.** Two of four outputs are
