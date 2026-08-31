@@ -4,7 +4,7 @@ Single source of truth for project state. Updated at the end of every
 session. The next session must be able to start from this file alone,
 with no conversational context.
 
-**Last updated:** 2026-08-29 · end of Session 6
+**Last updated:** 2026-08-31 · end of Session 7
 
 ---
 
@@ -13,8 +13,10 @@ with no conversational context.
 **Phases 0–2 — ✅ complete.**
 **Phase 3 (single-chapter generation) — ✅ complete (Session 5), verified
 against live providers.**
-**Phase 4 (deterministic style checks) — ⬜ next. Nothing started.**
-Session 6 was a provider-evaluation session only; no phase work.
+**Phase 4 (deterministic style checks) — ✅ complete (Session 7), run
+live against the committed chapters at zero cost.**
+**Phase 5 (editorial delta pass + reconciler) — ⬜ next.** Fixture-safe;
+still blocked against any real vault by OQ-01.
 
 The full drafting path works end-to-end: `write-session --book
 example-book` resolves the manifest target, assembles context, drafts via
@@ -22,13 +24,12 @@ minimax-m3 (openrouter → nvidia → groq fallback), writes a hash-verified
 chapter, flips the manifest, and records an audit JSON. Real-run proof:
 chapters 003 and 004 were generated and committed into the fixture.
 
-Provider stack final state after Session 4: six provider modules built;
-routing is **unchanged from Session 3** for drafting
-(openrouter:minimax-m3:free primary, nvidia → groq fallbacks) and
-editorial (gemini flash-lite → mistral-large). The aihubmix fallback slot
-added earlier on Session 4 was **removed again the same day** after its
-free tier proved to be ~10 lifetime requests unrecharged. 132 tests pass,
-ruff clean.
+`check-style --book example-book --chapter N` now measures any existing
+chapter with no API key present at all. 177 tests pass, ruff clean.
+
+Provider stack unchanged since Session 4: drafting
+openrouter:minimax-m3:free → nvidia → groq; editorial gemini flash-lite
+→ mistral-large. No provider work happened this session.
 
 ---
 
@@ -40,10 +41,83 @@ ruff clean.
 | 1 | Vault templates + config loader + `example-book` fixture | ✅ complete | — |
 | 2 | Provider layer: Gemini, OpenRouter, Groq, Mistral, NVIDIA (+AiHubMix S4, demoted from routing same day) | ✅ complete | — |
 | 3 | Single-chapter generation + continuation loop | ✅ complete (S5) | — |
-| 4 | Deterministic style checks | ⬜ next | — |
-| 5 | Editorial delta pass + reconciler | ⬜ | **OQ-01 (real vaults only)** |
+| 4 | Deterministic style checks | ✅ complete (S7) | — |
+| 5 | Editorial delta pass + reconciler | ⬜ next | **OQ-01 (real vaults only)** |
 | 6 | Session state machine + resume | ⬜ | — |
 | — | *Deferred (ADR-0001):* GitHub Actions, approval gate, Cousins endpoint, `new_book.py` interview | ⏸ | — |
+
+---
+
+## Session 7 — 2026-08-31
+
+**Phase 4 complete in three batches, all committed separately.** One
+author decision was taken first and written before any code (OQ-09).
+
+### Done
+
+**Decision first (decisions.md #22, `d194f5b`).** Style-check thresholds
+live in a `<!-- THRESHOLDS -->` delimited block in each book's
+`canon/style-guide.md`, parsed with the same marker discipline as
+MANIFEST and FACTS. **No block ⇒ metrics reported, verdicts skipped;
+there are no built-in numeric defaults in code.** Built-in defaults were
+the tempting shortcut — every chapter would get a verdict — and were
+rejected because an untuned book would then look tuned, and the creative
+constant would live in the engine. OQ-09 struck through.
+
+**Batch 1 — `quality/metrics.py` (`9344685`).** All nine specs §14
+metrics as pure functions over a chapter body: no IO, no provider
+imports, no verdicts. Tokenisation calls that hand-computed tests depend
+on: headings, list items and block quotes are dropped before counting
+(the chapter title never becomes a sentence); the sentence splitter
+over-splits on abbreviations, accepted because a few extra boundaries
+move a rhythm mean by well under a word; `word_count` re-implements
+`generate.word_count`'s `split()` convention rather than importing it,
+so `quality/` stays free of provider imports.
+
+**Batch 2 — thresholds + report (`dc658fb`).** `parse_thresholds`,
+`judge`, `build_report`, `StyleCheckError`. Absence is silent;
+malformation raises (unknown metric, non-numeric bound, inverted band,
+row bounding nothing, duplicate row, unterminated block). Collection
+metrics and `target_words` are unbandable by construction. The fixture
+style guide gained a block that deliberately leaves `type_token_ratio`
+and `words_vs_target` unbanded, with the reason written beside it — TTR
+falls with chapter length, and shortfall is already the continuation
+loop's job.
+
+**Batch 3 — `cli/check_style.py` (`b41c930`).** `check-style --book
+--chapter [--vault-root]`, rich table, advisory output. Bypasses
+`load_book_config` (which validates provider keys) on purpose:
+`target_words` comes from the chapter's own frontmatter, so a
+measurement pass runs on a machine with no keys. Entry point moved from
+`quality.style_checks:main` to `cli.check_style:main`.
+
+**Doc pass:** specs §14 gained the THRESHOLDS block format and the
+absent/malformed rule; specs §15 gained the `check-style` behaviour and
+an updated status line; architecture §8 module map updated (and a
+duplicated "Layout rationale" paragraph removed).
+
+### Verified
+
+- [x] 177 tests pass (132 → 150 → 170 → 177), ruff clean after every batch
+- [x] `check-style --book example-book --chapter 4` run live: 1474 words,
+      flags `sentence_length_mean` low and `dialogue_ratio` high, exit 0
+- [x] A test deletes every provider key from the environment and asserts
+      the CLI still measures — Phase 4's "no API dependency" criterion
+- [x] Fixture bands leave hand-written chapters 001–002 clean and flag
+      only the two live-generated chapters, on exactly the drifts the
+      style guide's prose warns about
+- [x] Exit codes: 0 for out-of-band metrics, 1 for missing chapter and
+      for a malformed thresholds block
+
+### Not done / not attempted
+
+- Hand-computed expected values are asserted on a small purpose-built
+  sample (paragraph lengths, sentence count, every rate). Against the
+  committed chapters 001–004 the tests assert invariants and
+  frontmatter agreement (`actual_words` vs measured body) plus exact
+  flag sets — not a hand-count of all nine metrics per chapter
+- No editorial or Phase 5 work; no provider work; no routing change
+- Nothing pushed
 
 ---
 
@@ -214,32 +288,42 @@ downstream treats stubs as absent. Implementation is Phase 3 Batch 3 work.
 
 ## Next session — start here
 
-**Goal: Phase 4 — deterministic style checks (`quality/style_checks.py`
-+ `check-style` CLI). Nothing started; begin by reading specs.md §14.**
+**Goal: Phase 5 — editorial delta pass + reconciler
+(`editorial/{schema,pass_runner,reconciler}.py` + the four vault append
+primitives). Nothing started. Begin by reading specs.md §5–7 and
+invariant 1 in CLAUDE.md.**
+
+Phase 5 is the first component that writes to canon. Invariant 1 (no
+model ever writes a canon file body) and invariant 2 (fail closed) are
+the whole design, not commentary.
 
 ### Blocked / waiting on the author
 
-1. Nothing technical blocks Phase 4: it is pure Python over existing
-   chapters, zero API cost.
-2. Style thresholds live in each book's style-guide.md, not in code
-   (specs §14). The example-book style guide currently has rhythm
-   targets but no explicit numeric thresholds for adverb rate,
-   type-token ratio, or dialogue ratio — decide whether the fixture
-   gains a thresholds block (recommended) or checks stay advisory-only
-   with defaults.
-3. Non-blocking: author may still supply a real Requesty key
+1. **OQ-01 is still open and still binds.** Phase 5 may be built and run
+   against `vault/example-book/` (git-recoverable). It must NOT be run
+   against any real vault until OQ-01 gives real content a restore path.
+   No real book exists yet, so this does not block the phase — but the
+   CLI must not quietly acquire the ability either.
+2. Non-blocking: author may still supply a real Requesty key
    (`rqy_...`) → spike its 12 free models before any routing change.
+3. Nothing else technical blocks Phase 5. The editorial route
+   (gemini flash-lite → mistral-large) has been live-verified since
+   Session 4 and is untouched.
 
 ### Read first
 
-1. This file, CLAUDE.md
-2. decisions.md #13–20 (Session 5 implementation decisions — do not
-   relitigate; especially the retrieval rule and overwrite gating)
-3. [specs.md](specs.md) §14 (metrics table) and §15 (`check-style` flags)
-4. Pitfalls B3 (measure, don't ask a model) and B5 (author-edit diff via
-   generated_hash — feeds suggested style-guide additions)
-5. [architecture.md](architecture.md) §7 (quality loops)
-6. open-questions.md OQ-09 (thresholds decision — resolve before Batch 2)
+1. This file, CLAUDE.md (especially invariants 1–3 and the vault
+   primitive list)
+2. decisions.md #13–22 — do not relitigate. #15/#16 (hash ownership,
+   byte-surgical flips) are the model the append primitives must follow;
+   #22 is the thresholds rule Phase 4 just implemented
+3. [specs.md](specs.md) §4 (fact-line grammar — the reconciler must emit
+   lines `context_builder.parse_facts` can read back), §5–7 (delta
+   schema, editorial pass, reconciliation)
+4. Pitfalls A1/A2 (delta validation, partial application) and B1
+5. [architecture.md](architecture.md) §3 (authority model) and §6
+6. [threat-model.md](threat-model.md) §6 Phase 5 checklist
+7. [adr.md](adr.md) ADR-0004 (why the fixture is the only safe target)
 
 ### What now exists (module map)
 
@@ -251,71 +335,90 @@ src/novel_engine/
                         #   recent_summaries, banned_phrases, build_prompt
   core/vault.py         # scaffold_book, write_chapter, flip_manifest_status,
                         #   generated_hash, split_chapter_file, chapter_path
+                        #   (append_fact/append_summary/append_thread/
+                        #    flip_thread_status are Phase 5 work — not built)
   core/errors.py        # NovelEngineError, ConfigError, ContextError, VaultError
   core/state_machine.py # STUB — Phase 6 work
-  drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs,
-                        #   AttemptRecord/DraftResult, continuation_prompt()
+  drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs
   drafting/provenance.py# make_session_id, chapter_frontmatter, utc_timestamp
-  providers/*           # unchanged since Session 4 (base, openai_compat,
-                        #   gemini, openrouter, groq, mistral, nvidia,
-                        #   aihubmix, router, audit)
+  providers/*           # unchanged since Session 4
+  quality/metrics.py    # compute_metrics() + the nine specs §14 metrics as
+                        #   pure functions; ChapterMetrics dataclass
+  quality/style_checks.py # parse_thresholds, judge, build_report, Threshold,
+                        #   Verdict, StyleReport, StyleCheckError,
+                        #   COMPARABLE_METRICS
   cli/new_book.py       # uv run new-book --slug X [--vault-root D]
-  cli/write_session.py  # WORKING: --book --chapter --dry-run --force;
-                        #   DRY_RUN=1 env var; typed overwrite confirmation;
-                        #   audit JSON; exit 1 on refusals + failed-stub
-  quality/style_checks.py # STUB — Phase 4 next session
+  cli/write_session.py  # --book --chapter --dry-run --force; DRY_RUN=1
+  cli/check_style.py    # WORKING: check-style --book X --chapter N
+                        #   [--vault-root D]; no API key required; exit 0 even
+                        #   when metrics are out of band
   editorial/{schema,pass_runner,reconciler}.py # STUBS — Phase 5 work
-templates/book/         # packaged scaffolder source
+src/novel_engine/templates/book/  # packaged scaffolder source
 vault/example-book/     # fixture: chapters 001-002 hand-written, 003-004
                         #   generated live in Session 5; manifest fully
-                        #   written (no planned rows left)
+                        #   written; style-guide.md now carries a
+                        #   THRESHOLDS block (7 banded metrics)
 tests/fakes.py          # FakeProvider, full_providers, text_of,
                         #   reset_fixture_state — shared doubles
 ```
 
-NOTE: the fixture manifest is now fully written (001-004). To exercise
+NOTE: the fixture manifest is fully written (001-004). To exercise
 drafting paths again, add a ch-005 row to plot-outline.md first.
 Tests never depend on live fixture state: reset_fixture_state() forces
 any copied book back to "001-002 written, 003 planned".
 
-NOTE: the fixture manifest is now fully written (001-004). To exercise
-drafting paths again, add a ch-005 row to plot-outline.md first.
+NOTE: `src/novel_engine/templates/book/` ships the scaffolder's
+style-guide template. It
+does NOT yet carry a THRESHOLDS block — deliberately, per decision #22:
+a new book starts untuned and visibly so. If that is ever changed, the
+block must ship commented out, never with numbers.
 
 Env keys active in `.env`: gemini, openrouter, groq, mistral, nvidia,
 aihubmix (emergency lane only). Routing truth:
 `vault/example-book/config/models.yaml`.
 
-### Batches (proposed for Phase 4)
+### Batches (proposed for Phase 5)
 
 Commit after each batch. Do not push.
 
-**Batch 1 — metrics module** (`quality/metrics.py`, pure functions):
-banned-phrase hits, sentence-length mean/stdev, adverb rate per 1000,
-type-token ratio, dialogue ratio, repeated openings, paragraph-length
-distribution, em-dash/semicolon rate, word count vs target. No IO.
+**Batch 1 — `editorial/schema.py`**: Pydantic models for the delta
+(specs §5). Reject anything that is not exactly the schema — extra
+keys, missing provenance, malformed fact lines. Pure validation, no IO.
 
-**Batch 2 — threshold parsing + report**: read optional numeric
-thresholds from style-guide.md; compare and flag; produce a structured
-report dict.
+**Batch 2 — vault append primitives**: `append_fact`, `append_summary`,
+`append_thread`, `flip_thread_status` in `core/vault.py`, each
+narrowly-scoped and each verifying its own write, in the shape of
+decisions #15/#16. Round-trip test: every appended fact line must parse
+back through `context_builder.parse_facts`.
 
-**Batch 3 — CLI wiring** (`check-style --book <slug> --chapter N`):
-print the report via rich; exit non-zero only on hard errors, never on
-metric values (advisory per specs §14).
+**Batch 3 — `editorial/pass_runner.py`**: build the editorial prompt,
+call through the router, validate the response into a delta, fail
+closed on anything invalid (invariant 2 — an invalid delta is applied
+not at all, never partially).
 
-### Phase 4 exit criteria
+**Batch 4 — `editorial/reconciler.py`**: apply a validated delta through
+the primitives only, all-or-nothing, with the pre-application state
+recorded so a failure is diagnosable.
+
+### Phase 5 exit criteria
 
 - [ ] pytest passes; ruff clean (every session)
-- [ ] All metrics computed correctly against committed chapters 001-004
-      with hand-computed expected values in tests
-- [ ] check-style runs zero-cost on any existing chapter
-- [ ] No API dependency anywhere in the quality package
+- [ ] A deliberately invalid delta leaves every canon file byte-identical
+- [ ] A partially-valid delta is applied not at all (invariant 2)
+- [ ] No model output is ever written to a canon body — only Python-built
+      lines from validated fields (invariant 1)
+- [ ] Every appended fact line round-trips through `parse_facts`
+- [ ] Ran end-to-end against `vault/example-book/` only
 
 ### Do not do next session
 
-- Do not generate against any real book (none exists yet)
+- Do not run the editorial pass against any real book (OQ-01 unresolved;
+  no real book exists yet either)
+- Do not let a model regenerate `continuity-tracker.md` or any canon
+  file body — that is invariant 1 and the reason the project exists
+- Do not add a general "write canon file" vault primitive
 - Do not re-add aihubmix to routing (cap is lifetime, not daily)
 - Do not chase the dismissed providers without NEW evidence; reasons are
-  dated in `.env` (tokenrouter added 2026-08-29 — its quota being
-  repairable is NOT new evidence; the 3-free-model ceiling is the reason)
-- Do not start Phase 5 (editorial pass) — blocked on OQ-01 real vaults
+  dated in `.env`
 - Do not wire next-step.md resume state (Phase 6)
+- Do not add built-in threshold defaults to `quality/` (decision #22)

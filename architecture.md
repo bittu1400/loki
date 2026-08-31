@@ -278,6 +278,7 @@ src/novel_engine/
   cli/
     write_session.py     # single-chapter session: dry-run, force gate, audit JSON
     new_book.py          # scaffolds a blank vault/<slug>/ and exits
+    check_style.py       # check-style: measures one chapter, no API keys needed
   core/
     config.py            # Pydantic settings; models.yaml + pipeline.yaml + startup validation
     vault.py             # THE ONLY WRITER: scaffold_book, write_chapter,
@@ -298,7 +299,8 @@ src/novel_engine/
     generate.py          # draft_chapter(): continuation loop, ADR-0005 failed-stub
     provenance.py        # make_session_id, chapter_frontmatter, utc_timestamp
   quality/
-    style_checks.py      # STUB — Phase 4
+    metrics.py           # specs §14 metrics as pure functions; no IO, no verdicts
+    style_checks.py      # THRESHOLDS parsing, judge(), build_report()
   editorial/
     schema.py            # STUB — Phase 5 delta models
     pass_runner.py       # STUB — Phase 5 prompt/call/validate/fail-closed
@@ -309,11 +311,6 @@ vault/
                          #   001-002 hand-written fixtures, 003-004 generated live
 tests/                   # fakes.py holds the scripted Provider doubles
 ```
-
-Layout rationale: `providers/` knows nothing about novels, `quality/` and
-`editorial/` know nothing about HTTP, and `vault.py` is the only module that
-writes to disk. That last constraint is what makes the authority model in §3
-enforceable rather than aspirational.
 
 Layout rationale: `providers/` knows nothing about novels, `quality/` and
 `editorial/` know nothing about HTTP, and `vault.py` is the only module that

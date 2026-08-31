@@ -510,6 +510,36 @@ creative choice, not an engineering constant. Metrics are advisory: they
 populate the session report and the editorial evidence, and never block a
 chapter automatically.
 
+**Thresholds block (as implemented, decisions.md #22).** Only the table
+strictly between the markers is parsed; the surrounding prose is for
+humans and the drafting model:
+
+```markdown
+<!-- THRESHOLDS:BEGIN -->
+| metric | min | max |
+|--------|-----|-----|
+| sentence_length_mean | 11 | 18 |
+| adverb_rate_per_1000 | - | 12 |
+<!-- THRESHOLDS:END -->
+```
+
+- `metric` names a scalar field of `ChapterMetrics`. Collection-valued
+  metrics (`banned_phrase_hits`, `repeated_openings`, `paragraph_lengths`)
+  are reported but never banded — "how many is too many" is a reading
+  judgement.
+- An empty cell, `-`, an en/em dash, `none`, or `any` means unbounded on
+  that side. A row must bound at least one side.
+- **No block at all is legitimate and silent:** metrics are reported and
+  every verdict is skipped. There are no built-in numeric defaults
+  anywhere in code.
+- **A block that exists but is malformed raises** (unknown metric,
+  non-numeric bound, inverted band, duplicate row, unterminated block).
+  A threshold the author believes is active but which silently does
+  nothing is worse than no threshold.
+
+Verdict statuses are `ok` / `low` / `high`. Out-of-band metrics never
+change the exit code.
+
 ---
 
 ## 15. CLI surface (v1)
@@ -547,9 +577,16 @@ real run (never on dry-runs): session id, book slug, chapter number,
 POV, beat, final phase, assigned/actual model, fallback flag,
 continuation rounds, token totals, and one record per call attempt.
 
-*(Status as of 2026-08-26: `new-book` and `write-session` are fully
-implemented; `check-style` is a stub until Phase 4; `--resume` waits
-for the Phase 6 state machine.)*
+`check-style` takes `--book`, `--chapter`, and `--vault-root`. It reads
+the chapter and `canon/style-guide.md` off disk and never constructs a
+provider or loads a key — `target_words` comes from the chapter's own
+frontmatter, not from config. It exits 0 whenever the chapter was
+measured, including when metrics fall outside their bands, and 1 only on
+a real error (missing chapter or style guide, malformed thresholds).
+
+*(Status as of 2026-08-31: `new-book`, `write-session`, and
+`check-style` are fully implemented; `--resume` waits for the Phase 6
+state machine.)*
 
 `--dry-run` is not a nicety. Prompt tuning is the highest-iteration activity
 in the project and the free-tier quota is the hardest constraint on it;
