@@ -246,6 +246,48 @@ and regenerate before expiry (`.env.example` carries the warning too).
 Treat "nvidia suddenly 401s" as a first diagnostic for expired keys before
 debugging anything else.
 
+### 🟠 C8 — A local chat template silently deciding what the model can do
+
+**The trap.** Sending an OpenAI-shaped request to a local server and
+assuming the model behaves as documented. It behaves as the **GGUF's
+bundled chat template** says, and that template has defaults nobody
+chose.
+
+**Cost.** gemma-4-12b is a reasoning model. Its template sets
+`enable_thinking | default(false)` and, when off, emits a *pre-closed*
+empty thought channel (`<|channel>thought\n<channel|>`) immediately after
+the model turn marker — so the model is actively steered past thinking,
+not merely left to skip it. Two full chapter spikes ran that way before
+anyone checked. The capability was there the whole time and invisible
+from the request side; `/v1/models` says nothing about it.
+
+**Countermeasure.** Read `/props` before trusting a local lane: the
+`chat_template` itself, and `chat_template_caps`. Toggle features through
+`chat_template_kwargs` in the request body. Note that llama.cpp's
+`supports_reasoning_effort: false` means the OpenAI `reasoning_effort`
+parameter is unsupported — NOT that the model cannot reason.
+
+### 🟡 C9 — Assuming a reasoning model reasons its way to compliance
+
+**The trap.** Turning thinking on because the output missed an
+instruction, on the theory that a model that plans will follow the plan.
+
+**Cost.** Measured 2026-08-31 on the identical ch-003 prompt: thinking on
+cost 2.0x the tokens (2875 vs 1406) and 2.0x the wall time (70s vs 35s),
+and the draft got **worse** on the metric it was meant to fix — sentence
+mean 10.9 (out of band) against 12.4 (in band), with more "He" openings,
+not fewer. The reasoning trace explicitly restated every constraint,
+checked each banned phrase by name, and measured a sample sentence at 34
+words — then produced prose that broke the rhythm rule anyway. Awareness
+of a constraint is not obedience to it, and the tokens spent proving
+awareness are tokens not spent on prose.
+
+**Countermeasure.** Keep thinking OFF for drafting; it is the same
+overhead that dismissed Cohere (decisions.md #11). Reasoning earns its
+cost where the *decision* is the deliverable rather than the prose — the
+Phase 5 editorial pass, which exists to detect contradiction against
+locked facts. Measure before enabling it there too.
+
 ---
 
 ## D. Automation and workflow

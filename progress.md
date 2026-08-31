@@ -160,6 +160,27 @@ Implementation notes worth keeping:
   the **GGUF file path** as the model ID, so provenance records what was
   requested, not what ran — the weakness ADR-0006 predicted, confirmed.
 
+**Reasoning check (author-requested follow-up).** gemma-4-12b is a
+reasoning model and its thinking was suppressed for both earlier drafts —
+not by our code but by the GGUF's chat template, which defaults
+`enable_thinking` to false and emits a pre-closed thought channel when
+off. Enabled it via `chat_template_kwargs` and re-ran the same prompt:
+
+| | Tokens | Seconds | Words | Sentence mean | Thresholds failed |
+|---|---|---|---|---|---|
+| thinking OFF | 1406 | 35 | 1140 | 12.4 | 0 |
+| thinking ON | 2875 | 70 | 1101 | 10.9 | 1 |
+
+2x cost for a worse draft. The trace restated every rule and checked each
+banned phrase by name, then broke the rhythm rule anyway — awareness is
+not obedience. Stays off for drafting; recorded as pitfalls C8 (the
+template silently deciding capability) and C9 (reasoning ≠ compliance).
+Worth measuring for the Phase 5 editorial pass, where the deliverable is
+a judgement rather than prose. No code changed: our provider does not
+send `chat_template_kwargs`, and llama.cpp returns reasoning in a
+separate `reasoning_content` field, so a chapter body could never have
+been polluted by it.
+
 **Two gaps this surfaced (neither fixed):**
 
 1. The banned-phrase check matches literal strings, so descriptive rules
@@ -185,6 +206,7 @@ nothing, so this is stricter than decision #17 requires.
   never drafted a brannec-tull chapter, never run through the
   continuation loop, and never been reached by a real fallback
 - The two gaps above are recorded, not fixed
+- Reasoning was NOT measured for the editorial pass — only for drafting
 - Nothing pushed
 
 ---

@@ -167,6 +167,32 @@ the music of the Office". And both rhythm-block drafts came in at
 essentially zero dialogue (0.002 and 0.000) — defensible per beat, worth
 watching as a pattern, and an argument for a dialogue_ratio minimum.
 
+**Fourth run — 2026-08-31, gemma with its thinking channel ON.** The
+author asked whether reasoning was blocked. It was, by the GGUF's own
+chat template (`enable_thinking | default(false)`, plus a pre-closed
+thought channel when off — pitfalls C8). Same ch-003 prompt, thinking
+enabled via `chat_template_kwargs`.
+
+| Draft | Completion tokens | Seconds | Words | Sentence mean | Thresholds failed |
+|---|---|---|---|---|---|
+| gemma + rhythm, thinking OFF | 1406 | 35 | 1140 | 12.4 | **0** |
+| gemma + rhythm, thinking ON | 2875 (874 reasoning words) | 70 | 1101 | 10.9 | 1 (mean low) |
+
+Twice the tokens, twice the time, worse rhythm. The reasoning trace is
+the interesting part: it restated every constraint correctly, listed each
+banned phrase and checked it off, and measured a sample sentence at "34
+words - Good" — then wrote prose with a 10.9-word mean and 40 "He"
+openings. It also explicitly decided "let's keep it internal/solitary",
+which is a plausible mechanism for the near-zero dialogue seen in both
+rhythm-block drafts: the style guide asks for sparse dialogue and the
+model resolves sparse as none.
+
+Conclusion: thinking stays OFF for drafting (decisions.md #11's Cohere
+finding, reproduced locally with numbers). It is worth measuring for the
+Phase 5 editorial pass, where the deliverable is a judgement about
+contradiction rather than prose — but that is a Phase 5 experiment, not a
+routing change now.
+
 **Answers to the four questions:**
 
 1. **Worth automating? Provisionally yes.** Two of four outputs are
