@@ -37,6 +37,17 @@ report what the numbers cannot see.
 
 {{style_evidence}}
 
+## Number checks — deterministic, already computed
+
+Quantities in the chapter compared against quantities in the locked
+facts above. A finding here is a confirmed disagreement between two
+numbers, not a suggestion: report it as a `critical` continuity
+violation unless the chapter is plainly counting a different thing. An
+empty result means only that no bare number disagreed — it is not a
+continuity review, and it does not excuse you from the check below.
+
+{{number_findings}}
+
 ## The chapter
 
 {{chapter_text}}

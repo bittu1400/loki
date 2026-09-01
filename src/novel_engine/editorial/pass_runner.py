@@ -35,6 +35,10 @@ from novel_engine.core.outline import ChapterEntry
 from novel_engine.editorial.schema import EditorialDelta, parse_delta
 from novel_engine.providers.base import Outcome, Provider, Success
 from novel_engine.providers.router import AttemptCallback, Router
+from novel_engine.quality.continuity_numbers import (
+    find_number_conflicts,
+    render_conflicts,
+)
 from novel_engine.quality.style_checks import StyleReport, build_report
 
 #: Low temperature for a judgement task. Not a creative constant
@@ -169,6 +173,9 @@ def build_editorial_prompt(
         "character_sheet": character_sheet_text.strip(),
         "style_guide": style_guide_text.strip(),
         "style_evidence": style_evidence(report),
+        "number_findings": render_conflicts(
+            find_number_conflicts(selected, chapter_body)
+        ),
         "chapter_text": chapter_body.strip(),
     }
     return fill_template(

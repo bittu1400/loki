@@ -143,6 +143,23 @@ def test_prompt_carries_the_evidence_and_leaves_no_slot_unfilled(book, entry) ->
     assert "dialogue ratio:" in prompt
 
 
+def test_prompt_carries_the_deterministic_number_findings(book, entry) -> None:
+    """Decision #30: the check runs before the call, and its result is
+    in the prompt either way — a 'nothing disagreed' line is evidence
+    too, and stops the model treating silence as absence of the check."""
+    clean = build_editorial_prompt(book, entry, BODY)
+    assert "## Number checks" in clean
+    assert "no quantity in the chapter disagrees" in clean
+
+    contradicting = build_editorial_prompt(
+        book,
+        entry,
+        "Nine corrections on the spring-tide page, nine countersignings "
+        "that pointed to a clerk dead six years.\n",
+    )
+    assert "canon says 2, the chapter says 9" in contradicting
+
+
 def test_prompt_retrieves_facts_rather_than_dumping_the_ledger(book, entry) -> None:
     tracker = (book.root / "canon/continuity-tracker.md").read_text(encoding="utf-8")
     all_facts = [line for line in tracker.splitlines() if line.startswith("- `[")]
