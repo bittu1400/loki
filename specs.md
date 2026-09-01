@@ -210,9 +210,13 @@ Append plus status flip. A thread is never deleted.
 <!-- THREADS:END -->
 ```
 
-Thread IDs are `T-` plus a zero-padded counter, allocated by the engine and
-never reused. The engine may flip `[open]` to `[resolved:ch-NNN]` from a
-validated delta; it may not rewrite the thread text.
+Thread IDs are `T-` plus a zero-padded counter, allocated by the engine as
+one above the highest ID in the file. They are never reused under engine
+operation — the engine only appends and only flips status, so a resolved
+thread keeps its line and its number (decision #27). Hand-deleting a
+thread line frees its number back; that is an author action outside the
+engine's guarantee. The engine may flip `[open]` to `[resolved:ch-NNN]`
+from a validated delta; it may not rewrite the thread text.
 
 ---
 
