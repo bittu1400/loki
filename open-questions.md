@@ -383,3 +383,60 @@ defaults.
 written. `<!-- THRESHOLDS -->` block in `style-guide.md`; no block ⇒
 metrics reported, verdicts skipped; no numeric defaults in code. The
 example-book fixture gains a block so Batches 2–3 are testable.
+
+---
+
+## 🔴 OQ-10 — Can the editor model actually catch a continuity contradiction?
+
+**Blocks:** nothing structurally. Blocks *trusting* the editorial pass.
+Raised 2026-09-01 at the end of Phase 5, from live evidence.
+
+**The situation.** Phase 5's machinery works end to end against the real
+editor route: the delta validated on the first call with zero repairs,
+and the reconciler applied it all-or-nothing. What it did NOT do is the
+thing the pass exists for.
+
+The test case was the original ch-005 (`git show
+d518b74:vault/example-book/chapters/chapter-005.md`), which says "nine
+corrections on the spring-tide page" against ch-001's locked fact that
+the page carries **two**. That fact was retrieved into the prompt and
+sat six lines above the chapter text. Two live runs on
+`gemini:gemini-3.5-flash-lite`:
+
+| Run | Prompt | `continuity_violations` | Verdict |
+|---|---|---|---|
+| 1 | "an invented violation is worse than a missed one" | `[]` | missed it, and the summary it wrote **repeated** "nine corrections" |
+| 2 | "check the chapter against every locked fact, one at a time; numbers are the commonest case" | one violation | still missed the nine-vs-two; reported "twelve years of rolls" against "kept the ledger for eleven years", which is arguably not a contradiction at all |
+
+So: one miss, one miss plus a false positive. The tightened prompt did
+change behaviour — it made the model perform a check — but not accuracy.
+
+**Why this matters more than a normal bug.** A pass that returns `[]` is
+indistinguishable from a clean chapter. The continuity system's whole
+value is catching what a human re-reader would not, and on its first
+real case it caught nothing while reporting success — the silent-failure
+shape of pitfall A1, arriving through a different door. Note also that
+`chapter_summary` is model prose appended to a canon ledger: run 1 wrote
+the contradiction INTO canon.
+
+**Scope of the question.** Only: what makes the continuity check
+reliable enough to trust. Not the delta schema, not the reconciler, not
+the fail-closed policy — those are settled and verified.
+
+**Options**
+
+| Option | How it works | Cost |
+|---|---|---|
+| **Try the fallback editor first (recommended first step)** | Re-run the same case on `mistral-large-latest`, then on the local lane. | One or two calls. Tells us whether this is model-specific or prompt-specific before any redesign. |
+| Ask fact-by-fact | The pass sends the chapter once per locked fact, or asks for an explicit per-fact verdict list. | N× the calls, or a schema change. Directly attacks "the model skimmed". |
+| Deterministic pre-filter | Extract numbers/names from locked facts in Python and flag chapters that state a different number for the same noun; hand the candidates to the model. | Real code, narrow scope, no quota. Catches exactly the number-disagreement class, which is the commonest and was the one missed twice. |
+| Accept and rely on the author | Treat the pass as a summariser and fact-proposer, and stop claiming it catches contradictions. | Honest, free, and gives up the feature the project was built around. |
+
+**Recommendation:** try the fallback model first, because it is two calls
+and it decides whether the next step is prompt work or engineering. Then
+the deterministic pre-filter — the missed case is a bare number
+disagreement, which is the one class Python can find without judgement.
+
+**Until resolved:** do not describe the editorial pass as a continuity
+guarantee anywhere. It proposes facts, writes summaries, and surfaces
+questions reliably; the violation list is unproven.

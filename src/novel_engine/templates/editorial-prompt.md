@@ -48,10 +48,15 @@ fence around it.
 
 Rules that matter more than completeness:
 
-- **A continuity violation is a contradiction with a locked fact above**,
-  not a thing you would have written differently. Quote the chapter text
-  that contradicts it and name the fact. If there are none, return an
-  empty list — an invented violation is worse than a missed one.
+- **Check the chapter against every locked fact above, one fact at a
+  time.** A continuity violation is a chapter statement that contradicts
+  one of them — a count, a number, a name, a date, or an event that
+  disagrees. Numbers are the commonest case: if a fact says two of
+  something and the chapter says nine, that is a critical violation even
+  when the chapter is otherwise consistent with itself. Quote the
+  contradicting chapter text and name the fact. Do not report things you
+  would merely have written differently. If nothing contradicts any
+  fact, return an empty list.
 - **New locked facts are concrete, checkable, and established by THIS
   chapter**: one atomic sentence each, no interpretation, no theme, no
   foreshadowing. `source_chapter` is {{chapter_number}}.
@@ -61,7 +66,10 @@ Rules that matter more than completeness:
 - **Thread ids are only the ones listed above.** Never invent one. A new
   thread goes in `opened` with text only — the engine allocates its id.
 - `resolved_in_chapter` is {{chapter_number}}.
-- `chapter_summary` is one paragraph, past tense, plot only.
+- `chapter_summary` is one paragraph, past tense, plot only. Where the
+  chapter contradicts a locked fact, the summary states what the LOCKED
+  FACT says — the summary is canon, and must not carry the error
+  forward.
 - `deepen_questions` are gaps in the world the chapter exposed and the
   canon does not answer. Empty list if none.
 - `suggested_canon_patches` are suggestions about author-owned files.
