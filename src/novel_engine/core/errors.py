@@ -35,3 +35,14 @@ class ConfigError(NovelEngineError):
     Raised at startup, before any API call. Messages are actionable:
     they name the file, the offending value, and what would fix it.
     """
+
+
+class EditorialError(NovelEngineError):
+    """The editorial model's delta is not usable.
+
+    Malformed JSON, a schema violation, or a field that could not be
+    turned into a canon line. Raised before anything is written, and
+    never fallback-eligible: a schema failure is a PERMANENT failure
+    (specs.md §12) and must not walk the drafting fallback chain
+    (invariant 3).
+    """
