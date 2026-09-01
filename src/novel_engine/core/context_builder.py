@@ -349,7 +349,7 @@ def build_prompt(book: BookConfig, chapter_number: int) -> AssembledPrompt:
         "chapter_instructions": instructions,
     }
 
-    filled = _fill_template(template, slot_values, root / "config/prompt-template.md")
+    filled = fill_template(template, slot_values, root / "config/prompt-template.md")
 
     return AssembledPrompt(
         text=filled,
@@ -362,8 +362,14 @@ def build_prompt(book: BookConfig, chapter_number: int) -> AssembledPrompt:
     )
 
 
-def _fill_template(template: str, values: dict[str, str], path: Path) -> str:
-    """Substitute slots strictly in order of appearance in the template."""
+def fill_template(template: str, values: dict[str, str], path: Path) -> str:
+    """Substitute slots strictly in order of appearance in the template.
+
+    Shared with the editorial prompt (decision #26), which is packaged
+    rather than per-book but is filled by exactly the same rules: an
+    unknown slot or a value with no slot is a hard error before any API
+    call (decision #13).
+    """
     out: list[str] = []
     cursor = 0
     seen: set[str] = set()
