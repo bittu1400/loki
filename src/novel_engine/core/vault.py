@@ -2,8 +2,9 @@
 
 THE ONE-WRITER RULE: this is the only module in the project permitted to
 write to disk. Everything else returns data. Exposes append primitives
-only — append_fact, append_summary, append_thread, flip_thread_status —
-and deliberately no general "write canon file" function (invariant 1).
+only — append_fact, append_thread, append_deepen_question,
+append_summary, flip_thread_status — and deliberately no general "write
+canon file" function (invariant 1).
 
 Phase 3 additions, same rule: write_chapter (create-only chapter file)
 and flip_manifest_status (the single permitted mechanical edit to
@@ -22,6 +23,12 @@ from typing import Any
 import yaml
 
 from novel_engine.core.config import SLUG_PATTERN
+from novel_engine.core.context_builder import (
+    FACTS_BEGIN,
+    FACTS_END,
+    parse_facts,
+    recent_summaries,
+)
 from novel_engine.core.errors import ConfigError, VaultError
 from novel_engine.core.outline import (
     LEGAL_STATUSES,
@@ -262,3 +269,322 @@ def flip_manifest_status(
         )
 
     outline_path.write_text(new_text, encoding="utf-8")
+
+
+# --- canon appends ----------------------------------------------------------
+#
+# Every primitive below adds ONE line inside a marker block (or one
+# heading-and-paragraph, for summaries) and verifies its own write by
+# reading the file back and parsing it. None of them can edit or delete
+# an existing line, and none of them accepts a file body — that is
+# invariant 1, expressed as an API rather than as a rule people remember.
+
+THREADS_BEGIN = "<!-- THREADS:BEGIN -->"
+THREADS_END = "<!-- THREADS:END -->"
+QUEUE_BEGIN = "<!-- QUEUE:BEGIN -->"
+QUEUE_END = "<!-- QUEUE:END -->"
+
+#: `- `[T-NNN]` `[open|resolved:ch-NNN]` `[ch-NNN]` <thread>` (specs.md §5)
+THREAD_LINE = re.compile(
+    r"^- `\[(?P<thread_id>T-\d{3,})\]` "
+    r"`\[(?P<status>open|resolved:ch-\d+)\]` "
+    r"`\[ch-(?P<chapter>\d+)\]` "
+    r"(?P<text>.+)$"
+)
+#: `- `[open|answered:YYYY-MM-DD]` `[ch-NNN]` <question>` (specs.md §6)
+QUEUE_LINE = re.compile(
+    r"^- `\[(?P<status>open|answered:\d{4}-\d{2}-\d{2})\]` "
+    r"`\[ch-(?P<chapter>\d+)\]` "
+    r"(?P<text>.+)$"
+)
+
+
+def _guard_line_text(value: str, field: str) -> str:
+    """One canon line's worth of text, or refuse before touching disk.
+
+    The delta schema checks this too. It is repeated here because
+    vault.py is the trust boundary that matters: a caller that skipped
+    validation must not be able to close a marker block from inside it.
+    """
+    text = value.strip()
+    if not text:
+        raise VaultError(f"{field} is empty; refusing to append a blank line.")
+    if "\n" in text or "\r" in text:
+        raise VaultError(f"{field} spans multiple lines; a canon entry is one line.")
+    if "<!--" in text or "-->" in text:
+        raise VaultError(
+            f"{field} contains HTML comment syntax; it would break the marker "
+            "block it is appended inside."
+        )
+    return text
+
+
+def _split_block(
+    path: Path, begin: str, end: str, text: str | None = None
+) -> tuple[str, str, str]:
+    """(before, inside, after) for exactly one marker block."""
+    if text is None:
+        text = path.read_text(encoding="utf-8")
+    if text.count(begin) != 1 or text.count(end) != 1:
+        raise VaultError(
+            f"{path} must contain exactly one {begin} and one {end}; found "
+            f"{text.count(begin)} and {text.count(end)}."
+        )
+    pre, rest = text.split(begin, 1)
+    section, post = rest.split(end, 1)
+    if not section.endswith("\n"):
+        raise VaultError(f"{path}: {end} is not at the start of its own line.")
+    return pre, section, post
+
+
+def _append_in_block(path: Path, begin: str, end: str, line: str) -> str:
+    """Insert `line` immediately before `end`. Returns the new file text.
+
+    Byte-surgical in the shape of flip_manifest_status (decision #16):
+    every other byte of the file is preserved verbatim, and the write is
+    verified to have added exactly that one line and changed nothing
+    else.
+    """
+    pre, section, post = _split_block(path, begin, end)
+    before = pre + begin + section + end + post
+    if line in section.splitlines():
+        raise VaultError(
+            f"{path} already contains this exact line; refusing to append a "
+            f"duplicate:\n  {line}"
+        )
+    after = pre + begin + section + line + "\n" + end + post
+    path.write_text(after, encoding="utf-8")
+
+    on_disk = path.read_text(encoding="utf-8")
+    if on_disk != after:
+        raise VaultError(f"{path}: what landed on disk is not what was written.")
+    old_lines = before.splitlines()
+    new_lines = on_disk.splitlines()
+    index = len((pre + begin + section).splitlines())
+    if new_lines != [*old_lines[:index], line, *old_lines[index:]]:
+        raise VaultError(
+            f"{path}: the append changed more than one line. Restore the file "
+            "from git before re-running."
+        )
+    return on_disk
+
+
+def append_fact(
+    book_root: Path,
+    category: str,
+    entity: str,
+    chapter_number: int,
+    text: str,
+) -> str:
+    """Append one locked fact to canon/continuity-tracker.md.
+
+    Always tagged `[model]`. There is no origin parameter: the engine
+    only ever appends facts a model proposed, and a code path able to
+    write `[author]` would make model-invented canon indistinguishable
+    from the author's within a few sessions (pitfall A4). Author facts
+    are hand-written.
+
+    Returns the line as stored.
+    """
+    text = _guard_line_text(text, "fact")
+    scoped = f"{category}:{entity}" if entity else category
+    line = f"- `[{scoped}]` `[ch-{chapter_number:03d}]` `[model]` {text}"
+
+    path = book_root / "canon" / "continuity-tracker.md"
+    # Parse BEFORE writing: appending to an already-malformed ledger
+    # would bury the real problem under a successful-looking session.
+    before = parse_facts(path.read_text(encoding="utf-8"), path)
+    on_disk = _append_in_block(path, FACTS_BEGIN, FACTS_END, line)
+
+    after = parse_facts(on_disk, path)
+    if len(after) != len(before) + 1 or after[-1].raw != line:
+        raise VaultError(
+            f"{path}: the appended fact does not read back as one new fact "
+            "line. Restore the file from git before re-running."
+        )
+    return line
+
+
+def append_thread(book_root: Path, chapter_number: int, text: str) -> str:
+    """Open a new thread in canon/open-threads.md. Returns its ID.
+
+    IDs are allocated here, never by a model: the next ID is one above
+    the highest currently in the file. Because the engine only ever
+    appends and only ever flips status, that is enough for IDs never to
+    repeat under engine operation — a resolved thread keeps its line and
+    keeps its number.
+
+    The one way a number can be reissued is an author DELETING a thread
+    line by hand, which the engine cannot see. That is the author's
+    action on an append-only file, not an engine guarantee.
+    """
+    text = _guard_line_text(text, "thread")
+    path = book_root / "canon" / "open-threads.md"
+    threads = _parse_threads(path)
+    numbers = [int(match.group("thread_id").removeprefix("T-")) for match in threads]
+    thread_id = f"T-{max(numbers, default=0) + 1:03d}"
+    line = f"- `[{thread_id}]` `[open]` `[ch-{chapter_number:03d}]` {text}"
+
+    on_disk = _append_in_block(path, THREADS_BEGIN, THREADS_END, line)
+    after = _parse_threads(path, on_disk)
+    if len(after) != len(threads) + 1 or after[-1].group("thread_id") != thread_id:
+        raise VaultError(
+            f"{path}: the appended thread does not read back. Restore the file "
+            "from git before re-running."
+        )
+    return thread_id
+
+
+def _parse_threads(path: Path, text: str | None = None) -> list[re.Match[str]]:
+    """Every thread line in the block, or refuse on the first malformed one."""
+    _, section, _ = _split_block(path, THREADS_BEGIN, THREADS_END, text)
+    matches: list[re.Match[str]] = []
+    for line in section.splitlines():
+        if not line.strip():
+            continue
+        match = THREAD_LINE.match(line)
+        if not match:
+            raise VaultError(
+                f"{path}: line does not match the thread grammar "
+                "`[T-NNN]` `[open|resolved:ch-NNN]` `[ch-NNN]` <thread>:\n"
+                f"  {line.strip()!r}"
+            )
+        matches.append(match)
+    return matches
+
+
+def flip_thread_status(
+    book_root: Path,
+    thread_id: str,
+    resolved_in_chapter: int,
+) -> None:
+    """Mark one open thread resolved. The thread text is never rewritten.
+
+    The second permitted mechanical edit in the project, and the same
+    shape as the first (decision #16): one cell of one line changes,
+    every other byte is preserved, and the result is verified before the
+    call returns.
+    """
+    path = book_root / "canon" / "open-threads.md"
+    text = path.read_text(encoding="utf-8")
+    matches = _parse_threads(path, text)
+
+    hits = [m for m in matches if m.group("thread_id") == thread_id]
+    if not hits:
+        raise VaultError(f"{path}: no thread {thread_id}.")
+    if len(hits) > 1:
+        raise VaultError(f"{path}: {thread_id} appears twice; refusing to guess.")
+    match = hits[0]
+    if match.group("status") != "open":
+        raise VaultError(
+            f"{path}: {thread_id} is already {match.group('status')!r}; "
+            "a thread is resolved once."
+        )
+
+    old_line = match.group(0)
+    new_line = old_line.replace(
+        "`[open]`", f"`[resolved:ch-{resolved_in_chapter:03d}]`", 1
+    )
+    if text.count(old_line) != 1:
+        raise VaultError(
+            f"{path}: the line for {thread_id} is not unique in the file; "
+            "refusing to splice."
+        )
+    new_text = text.replace(old_line, new_line, 1)
+    path.write_text(new_text, encoding="utf-8")
+
+    on_disk = path.read_text(encoding="utf-8")
+    differing = [
+        (old, new)
+        for old, new in zip(text.splitlines(), on_disk.splitlines(), strict=True)
+        if old != new
+    ]
+    flipped = _parse_threads(path, on_disk)
+    changed = next(m for m in flipped if m.group("thread_id") == thread_id)
+    if (
+        len(differing) != 1
+        or changed.group("status") != f"resolved:ch-{resolved_in_chapter:03d}"
+        or changed.group("text") != match.group("text")
+        or changed.group("chapter") != match.group("chapter")
+    ):
+        raise VaultError(
+            f"{path}: the flip changed more than {thread_id}'s status. Restore "
+            "the file from git before re-running."
+        )
+
+
+def append_deepen_question(book_root: Path, chapter_number: int, question: str) -> str:
+    """Append one open question to canon/deepen-queue.md. Returns the line.
+
+    The queue is for the author to answer later; the engine never flips
+    a question to `answered:` — that date is the author's word, not a
+    model's inference.
+    """
+    question = _guard_line_text(question, "deepen question")
+    path = book_root / "canon" / "deepen-queue.md"
+    line = f"- `[open]` `[ch-{chapter_number:03d}]` {question}"
+
+    _, section, _ = _split_block(path, QUEUE_BEGIN, QUEUE_END)
+    for existing in section.splitlines():
+        if existing.strip() and not QUEUE_LINE.match(existing):
+            raise VaultError(
+                f"{path}: line does not match the queue grammar "
+                "`[open|answered:YYYY-MM-DD]` `[ch-NNN]` <question>:\n"
+                f"  {existing.strip()!r}"
+            )
+    on_disk = _append_in_block(path, QUEUE_BEGIN, QUEUE_END, line)
+    if line not in on_disk.split(QUEUE_BEGIN, 1)[1].split(QUEUE_END, 1)[0].splitlines():
+        raise VaultError(f"{path}: the appended question does not read back.")
+    return line
+
+
+def append_summary(book_root: Path, chapter_number: int, paragraph: str) -> None:
+    """Append one `## ch-NNN` summary to log/chapter-summary.md.
+
+    Not a marker block: the file is a chronological ledger sliced by
+    heading (specs.md §7), so the append goes at the end and must stay
+    in chapter order. A summary for a chapter that already has one is
+    refused rather than duplicated — the context builder slices the last
+    N headings and would otherwise show the same chapter twice.
+    """
+    body = paragraph.strip()
+    if not body:
+        raise VaultError("Chapter summary is empty; refusing to append it.")
+    if any(line.startswith("## ") for line in body.splitlines()):
+        raise VaultError(
+            "Chapter summary contains a '## ' line, which would forge a "
+            "second heading in the ledger."
+        )
+
+    path = book_root / "log" / "chapter-summary.md"
+    text = path.read_text(encoding="utf-8")
+    existing = recent_summaries(text, -1, path)
+    chapters = [entry.chapter for entry in existing]
+    if chapter_number in chapters:
+        raise VaultError(
+            f"{path}: ch-{chapter_number:03d} already has a summary; the "
+            "ledger holds one paragraph per chapter."
+        )
+    if chapters and chapter_number < max(chapters):
+        raise VaultError(
+            f"{path}: refusing to append ch-{chapter_number:03d} after "
+            f"ch-{max(chapters):03d}; the ledger is in chapter order."
+        )
+
+    heading = f"## ch-{chapter_number:03d}"
+    new_text = text.rstrip("\n") + f"\n\n{heading}\n{body}\n"
+    path.write_text(new_text, encoding="utf-8")
+
+    on_disk = path.read_text(encoding="utf-8")
+    after = recent_summaries(on_disk, -1, path)
+    if (
+        on_disk != new_text
+        or len(after) != len(existing) + 1
+        or after[-1].chapter != chapter_number
+        or after[-1].paragraph != body
+        or not on_disk.startswith(text.rstrip("\n"))
+    ):
+        raise VaultError(
+            f"{path}: the appended summary does not read back as one new "
+            "entry. Restore the file from git before re-running."
+        )
