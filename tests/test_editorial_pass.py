@@ -102,14 +102,15 @@ BODY = (
 
 
 def editor_providers(*outcomes, fallback=None):
-    """gemini primary, mistral fallback — the fixture's editor routes."""
+    """mistral primary, gemini fallback — the fixture's editor routes
+    since decision #28."""
     return {
-        "gemini": FakeProvider(*outcomes),
-        "mistral": FakeProvider(fallback or RateLimited("unused")),
+        "mistral": FakeProvider(*outcomes),
+        "gemini": FakeProvider(fallback or RateLimited("unused")),
     }
 
 
-def ok(payload, model="gemini-3.5-flash-lite") -> Success:
+def ok(payload, model="mistral-medium-latest") -> Success:
     text = payload if isinstance(payload, str) else json.dumps(payload)
     return Success(text, model, 800, 200, 40)
 
@@ -170,7 +171,7 @@ def test_valid_response_is_returned_as_a_delta(book, entry) -> None:
     assert result.repair_rounds == 0
     assert result.delta is not None
     assert result.delta.thread_updates.resolved[0].thread_id == "T-002"
-    assert result.actual_model == "gemini:gemini-3.5-flash-lite"
+    assert result.actual_model == "mistral:mistral-medium-latest"
     assert result.fallback_triggered is False
     assert result.reason == ""
 
@@ -179,7 +180,7 @@ def test_the_pass_asks_for_json_at_a_judgement_temperature(book, entry) -> None:
     providers = editor_providers(ok(DELTA))
     run_editorial_pass(book, entry, BODY, providers)
 
-    request = providers["gemini"].calls[0]
+    request = providers["mistral"].calls[0]
     assert request.json_mode is True
     assert request.temperature == EDITORIAL_PARAMS.temperature == 0.2
     assert book.models.generation_params.temperature == 0.9  # drafting is untouched
@@ -194,7 +195,7 @@ def test_prose_wrapped_json_is_repaired_then_accepted(book, entry) -> None:
 
     assert result.status == "validated"
     assert result.repair_rounds == 1
-    repair = providers["gemini"].calls[1].prompt
+    repair = providers["mistral"].calls[1].prompt
     assert "Your previous answer was rejected" in repair
     assert "not valid JSON" in repair
     assert result.input_tokens == 1600  # both calls counted
@@ -204,7 +205,7 @@ def test_repair_prompt_is_rebuilt_from_the_base_not_compounded(book, entry) -> N
     providers = editor_providers(ok("FIRST-GARBAGE"), ok("SECOND-GARBAGE"), ok(DELTA))
     result = run_editorial_pass(book, entry, BODY, providers)
 
-    second_repair = providers["gemini"].calls[2].prompt
+    second_repair = providers["mistral"].calls[2].prompt
     assert result.status == "validated"
     assert result.repair_rounds == 2
     assert second_repair.count("Your previous answer was rejected") == 1
@@ -222,7 +223,7 @@ def test_invalid_after_every_repair_fails_closed(book, entry) -> None:
     assert "nothing" in result.reason and "editorial-pending" in result.reason
     assert "chapter_summary" in result.reason  # the last error is quoted
     # max_repair_attempts=2 in the fixture: one original call plus two repairs.
-    assert len(providers["gemini"].calls) == 3
+    assert len(providers["mistral"].calls) == 3
     assert canon_digest(book) == before
 
 
@@ -250,7 +251,7 @@ def test_no_route_answering_leaves_canon_untouched(book, entry) -> None:
         book,
         entry,
         BODY,
-        editor_providers(TransientFailure("gemini down"), fallback=RateLimited("429")),
+        editor_providers(TransientFailure("mistral down"), fallback=RateLimited("429")),
     )
 
     assert result.status == "editorial-pending"
@@ -265,14 +266,14 @@ def test_fallback_to_the_second_editor_route_is_recorded(book, entry) -> None:
         entry,
         BODY,
         editor_providers(
-            TransientFailure("gemini down"),
-            fallback=ok(DELTA, model="mistral-large-latest"),
+            TransientFailure("mistral down"),
+            fallback=ok(DELTA, model="gemini-3.5-flash-lite"),
         ),
     )
 
     assert result.status == "validated"
     assert result.fallback_triggered is True
-    assert result.actual_model == "mistral:mistral-large-latest"
+    assert result.actual_model == "gemini:gemini-3.5-flash-lite"
 
 
 def test_a_permanent_failure_never_reaches_the_second_provider(book, entry) -> None:
@@ -283,7 +284,7 @@ def test_a_permanent_failure_never_reaches_the_second_provider(book, entry) -> N
     result = run_editorial_pass(book, entry, BODY, providers)
 
     assert result.status == "editorial-pending"
-    assert providers["mistral"].calls == []
+    assert providers["gemini"].calls == []
 
 
 def test_the_pass_writes_nothing_even_when_it_succeeds(book, entry) -> None:

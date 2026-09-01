@@ -34,8 +34,17 @@ fallback_chain: # applies when a pov_model's provider fails or is rate-limited
 # stability condition (open-questions.md OQ-04 re-run; decisions.md #12).
 
 editor_model:
-  primary: { provider: gemini, model: gemini-3.5-flash-lite } # valid JSON w/ responseMimeType, verified
-  fallback: { provider: mistral, model: mistral-large-latest } # valid JSON w/ json_object, verified
+  # REORDERED 2026-09-01 (decisions.md #28) on the first real continuity case.
+  # Pointed at the original ch-005 ("nine corrections" against ch-001's locked
+  # "two"), flash-lite returned an empty violation list TWICE and once wrote the
+  # contradiction into the summary; mistral-medium quoted the contradicting
+  # sentence and named the fact, first call, zero repairs. Editorial is a
+  # judgement task, so the model that judges leads.
+  primary: { provider: mistral, model: mistral-medium-latest } # valid JSON w/ json_object; ~1100 output tokens/delta
+  fallback: { provider: gemini, model: gemini-3.5-flash-lite } # valid JSON w/ responseMimeType; misses contradictions (OQ-10)
+# mistral-large-latest REMOVED 2026-09-01: 403 'This model is not available in
+# your subscription tier' (code 1910) on the key that verified it in Session 4.
+# It is still LISTED by /v1/models — the catalog is not the entitlement.
 
 generation_params:
   temperature: 0.9
