@@ -490,6 +490,16 @@ single byte is written. It never returns markdown file bodies.
 3. A schema failure is a **permanent** failure and must not walk the
    drafting fallback chain (see [architecture.md](architecture.md) §6).
 
+**Status (2026-09-01):** implemented as written.
+`editorial/schema.py` validates, `editorial/pass_runner.py` runs the call
+and the repair loop, `editorial/reconciler.py` applies. Two additions the
+code makes that this section did not state: anything destined for a canon
+line must be a single line free of HTML comment syntax (a fact containing
+`<!-- FACTS:END -->` would close the block it was appended inside), and
+there is no `origin` field — every fact arriving through the schema came
+from a model and is tagged `[model]` unconditionally (§4, pitfall A4).
+There is no CLI for the pass yet; wiring it into a session is Phase 6.
+
 ---
 
 ## 13. Session audit record — `log/sessions/<session-id>.json`

@@ -314,13 +314,14 @@ src/novel_engine/
     metrics.py           # specs §14 metrics as pure functions; no IO, no verdicts
     style_checks.py      # THRESHOLDS parsing, judge(), build_report()
   editorial/
-    schema.py            # STUB — Phase 5 delta models
-    pass_runner.py       # STUB — Phase 5 prompt/call/validate/fail-closed
-    reconciler.py        # STUB — Phase 5 append-only application
+    schema.py            # delta models; extra="forbid"; canon-line text guards
+    pass_runner.py       # prompt/call/validate/repair; fail-closed, writes nothing
+    reconciler.py        # the only caller of the canon appends; all-or-nothing
 templates/book/          # packaged scaffolder source (vault templates)
+templates/editorial-prompt.md  # engine-owned editorial prompt (decision #26)
 vault/
-  example-book/          # committed fixture (ADR-0004); chapters 001-004 on disk,
-                         #   001-002 hand-written fixtures, 003-004 generated live
+  example-book/          # committed fixture (ADR-0004); chapters 001-005 on disk,
+                         #   001-002 hand-written, 003-005 generated live
 tests/                   # fakes.py holds the scripted Provider doubles
 ```
 

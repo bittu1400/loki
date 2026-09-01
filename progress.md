@@ -4,36 +4,37 @@ Single source of truth for project state. Updated at the end of every
 session. The next session must be able to start from this file alone,
 with no conversational context.
 
-**Last updated:** 2026-08-31 · end of Session 7
+**Last updated:** 2026-09-01 · end of Session 8
 
 ---
 
 ## Current state
 
-**Phases 0–2 — ✅ complete.**
-**Phase 3 (single-chapter generation) — ✅ complete (Session 5), verified
-against live providers.**
-**Phase 4 (deterministic style checks) — ✅ complete (Session 7), run
-live against the committed chapters at zero cost.**
-**Phase 5 (editorial delta pass + reconciler) — ⬜ next.** Fixture-safe;
-still blocked against any real vault by OQ-01.
+**Phases 0–4 — ✅ complete.**
+**Phase 5 (editorial delta pass + reconciler) — ✅ complete (Session 8)**
+against `vault/example-book/`, including one live end-to-end run on the
+real editor route. Still must NOT run against a real vault: OQ-01 is
+unresolved and no real book exists yet.
+**Phase 6 (session state machine + resume) — ⬜ next.**
 
-The full drafting path works end-to-end: `write-session --book
-example-book` resolves the manifest target, assembles context, drafts via
-minimax-m3 (openrouter → nvidia → groq fallback), writes a hash-verified
-chapter, flips the manifest, and records an audit JSON. Real-run proof:
-chapters 003 and 004 were generated and committed into the fixture.
+The full path now exists: `write-session` drafts and writes a chapter;
+`check-style` measures it for free; `editorial.pass_runner` reviews it
+and returns a schema-validated delta or a refusal; `editorial.reconciler`
+applies that delta to canon all-or-nothing through the vault primitives.
+**262 tests pass, ruff clean.**
 
-`check-style --book example-book --chapter N` now measures any existing
-chapter with no API key present at all. **187 tests pass, ruff clean.**
+**The one thing to carry forward:** the machinery is verified and the
+judgement is not. Pointed live at the original ch-005 — "nine
+corrections" against ch-001's locked "two", with that fact in the prompt
+— the editor model returned an empty violation list and wrote the
+contradiction into the summary it appended to canon. A tightened prompt
+made it perform the check and report a *different*, wrong violation.
+Recorded as **OQ-10**, which is the most important open item in the
+project right now: a pass that returns `[]` is indistinguishable from a
+clean chapter.
 
-Provider stack gained one lane this session (ADR-0006): drafting
-openrouter:minimax-m3:free → nvidia → groq → **local llama.cpp**;
-editorial gemini flash-lite → mistral-large, unchanged. The prompt
-template gained a rhythm block (decision #23), verified live on both
-gemma-4-12b and minimax-m3.
-
----
+Nothing is wired into a CLI yet — Phase 6 wires the pass and the
+reconciler into a session and persists the phase pointer.
 
 ## Phase tracker
 
@@ -44,9 +45,128 @@ gemma-4-12b and minimax-m3.
 | 2 | Provider layer: Gemini, OpenRouter, Groq, Mistral, NVIDIA (+AiHubMix S4, demoted from routing same day) | ✅ complete | — |
 | 3 | Single-chapter generation + continuation loop | ✅ complete (S5) | — |
 | 4 | Deterministic style checks | ✅ complete (S7) | — |
-| 5 | Editorial delta pass + reconciler | ⬜ next | **OQ-01 (real vaults only)** |
-| 6 | Session state machine + resume | ⬜ | — |
+| 5 | Editorial delta pass + reconciler | ✅ complete (S8) | **OQ-01 (real vaults only)** |
+| 6 | Session state machine + resume | ⬜ next | — |
 | — | *Deferred (ADR-0001):* GitHub Actions, approval gate, Cousins endpoint, `new_book.py` interview | ⏸ | — |
+
+---
+
+## Session 8 — 2026-09-01
+
+**Phase 5 complete in four batches, all committed separately.** Two
+author decisions were taken mid-phase and written before the code that
+depended on them.
+
+### Done
+
+**Batch 1 — `editorial/schema.py` (`dca6ccf`).** Pydantic models for the
+specs §12 delta, `extra="forbid"` everywhere. Scalars required,
+collections default to empty — a chapter that raised no violation is the
+normal case, and spending a repair attempt on an omitted empty list
+burns the scarcest quota in the stack. Anything destined for a canon
+line must be a single line free of HTML comment syntax (a fact
+containing `<!-- FACTS:END -->` would close the block it lands in).
+**No `origin` field**: every fact through this schema came from a model
+and is tagged `[model]` unconditionally, because a model able to claim
+`[author]` defeats pitfall A4 in one call. A test composes the line for
+every validated fact and matches it against `context_builder.FACT_LINE`.
+
+**Decisions #26 and #27 (`0e1e081`), written before Batch 3.** #26: the
+editorial prompt is engine-owned and packaged, not per-book — it is a
+JSON contract plus assembled evidence, and a book-local edit could break
+the contract silently, spending every repair attempt before failing
+closed. #27: thread IDs are one above the highest in the file; that
+never repeats under engine operation, and an author hand-deleting a line
+frees the number back — an author action outside the engine's guarantee.
+specs §5 was corrected, since it claimed a stronger guarantee than the
+code makes.
+
+**Batch 2 — five vault append primitives (`9fae20e`).** `append_fact`,
+`append_thread`, `append_deepen_question`, `append_summary`,
+`flip_thread_status`. Five, not the four CLAUDE.md listed: the delta
+carries `deepen_questions` and architecture §3 makes the deepen queue
+engine-append-only, so the reconciler cannot apply a validated delta
+without it. Each verifies its own write by **re-parsing the file**, not
+by trusting the string it built — facts through `parse_facts`, summaries
+through `recent_summaries`, threads through the thread grammar — with
+the byte-level check from decision #16 underneath (exactly one line
+inserted at the expected index, every other byte identical).
+
+**Batch 3 — `editorial/pass_runner.py` + packaged template (`16a4b37`).**
+Assembles the prompt (retrieved facts, open threads with their real IDs,
+the beat, the character sheet, the style guide, and the Phase 4 metrics
+already computed), calls through the editor routes with `json_mode`,
+validates, and repairs up to `max_repair_attempts` before failing
+closed. Repairs rebuild from the BASE prompt rather than compounding —
+otherwise every repair re-sends every rejected answer. Temperature 0.2,
+not the book's 0.9: the deliverable is a JSON verdict, not prose.
+`context_builder._fill_template` became `fill_template` (two modules use
+it now).
+
+**Batch 4 — `editorial/reconciler.py` + `vault.canon_transaction`
+(`31f4181`).** The first code in the project that changes canon. Takes an
+`EditorialDelta` — never a string, never a dict — and builds every line
+in Python from typed fields. The whole apply runs inside
+`canon_transaction`, which snapshots all four canon files and restores
+every one of them on any failure, keeping the snapshot directory and
+naming it in the error. `suggested_canon_patches` go to
+`log/sessions/<id>-patches.md` as text, written only after the canon
+change succeeded. `progressed` thread updates deliberately write nothing
+(specs §5 forbids rewriting thread text).
+
+**Live run (`13a6550`), author-approved spend.** Original ch-005 from
+`d518b74`, real editor route, temp copy of the fixture.
+
+### Verified
+
+- [x] 262 tests pass (235 → 248 → 262 across the batches), ruff clean
+      after every batch
+- [x] Live: delta validated on the FIRST call, zero repairs, no fallback,
+      3430 in / 400 out tokens on `gemini:gemini-3.5-flash-lite`
+- [x] Live: the reconciler applied it all-or-nothing — two facts, one
+      deepen question, one summary — and every appended line reads back
+      through the parser that retrieves it
+- [x] Every Phase 5 exit criterion: invalid delta leaves canon
+      byte-identical; a delta that fails at the fourth step undoes the
+      three that landed; no model output reaches a canon body; every
+      appended fact round-trips through `parse_facts`; fixture only
+- [x] threat-model §6 Phase 5 checklist ticked with test names, including
+      the snapshot mechanism
+
+### The live run's real finding — OQ-10
+
+The test case was chosen because it is the one thing a Phase 4 metric
+cannot see: ch-005 says "nine corrections on the spring-tide page"
+against ch-001's locked fact that the page carries **two**. That fact was
+retrieved into the prompt, six lines above the chapter text.
+
+| Run | Prompt | `continuity_violations` | Result |
+|---|---|---|---|
+| 1 | "an invented violation is worse than a missed one" | `[]` | missed it — and the summary it wrote repeated "nine corrections", putting the contradiction INTO canon |
+| 2 | "check the chapter against every locked fact, one at a time; numbers are the commonest case" | one | still missed nine-vs-two; reported "twelve years of rolls" against "kept the ledger for eleven years", which is arguably not a contradiction |
+
+The tightened wording is kept (the first version actively discouraged
+the check) but it is not a fix. Everything else in the delta was good:
+the new facts were concrete and correct, the deepen question was real,
+`beat_adherence` was accurate. It is specifically the violation list
+that is unproven, and that is the feature the project was built around.
+
+### Not done / not attempted
+
+- No CLI for the editorial pass. Nothing calls `pass_runner` or
+  `reconciler` in a session — that is Phase 6 wiring
+- The fallback editor (`mistral-large-latest`) was never exercised live;
+  only the fakes cover it. OQ-10's recommended first step is to run the
+  same case on it
+- Reasoning-on for the editorial pass was NOT measured (still the open
+  experiment from Session 7)
+- `next_step_note` is validated and returned but written nowhere —
+  `log/next-step.md` is Phase 6
+- OQ-01 untouched. `canon_transaction` recovers one interrupted apply,
+  NOT a session an author wants to undo tomorrow
+- The two Session 7 gaps (descriptive banned-phrase rules, no
+  `dialogue_ratio` minimum) remain open
+- Nothing pushed
 
 ---
 
@@ -402,47 +522,69 @@ downstream treats stubs as absent. Implementation is Phase 3 Batch 3 work.
 
 ## Next session — start here
 
-**Goal: Phase 5 — editorial delta pass + reconciler
-(`editorial/{schema,pass_runner,reconciler}.py` + the four vault append
-primitives). Nothing started. Begin by reading specs.md §5–7 and
-invariant 1 in CLAUDE.md.**
+**Two things compete for this session. Ask the author which one first.**
 
-Phase 5 is the first component that writes to canon. Invariant 1 (no
-model ever writes a canon file body) and invariant 2 (fail closed) are
-the whole design, not commentary.
+**Option A — OQ-10 (recommended).** The editorial pass's continuity
+judgement is unproven and it is the feature the project exists for.
+OQ-10's first step is two live calls: run the same ch-005 case on the
+fallback editor (`mistral:mistral-large-latest`), and if it also misses,
+prototype the deterministic pre-filter (Python finds number
+disagreements between a locked fact and the chapter, and hands the
+candidates to the model). That is engineering, not prompt roulette, and
+it attacks exactly the class that was missed twice.
+
+**Option B — Phase 6: session state machine + resume**
+(`core/state_machine.py`, `log/next-step.md` persistence, and wiring
+`pass_runner` + `reconciler` into `write-session`). Nothing started.
+specs §11 has the state diagram; §8 has the `next-step.md` contract.
+
+Phase 6 is the phase the tracker says is next. OQ-10 is the phase the
+evidence says is next. They are not in conflict — Phase 6 wires up a
+pass whose verdicts we do not yet trust, which is fine as long as the
+CLI reports the violation list as advisory.
+
+### Reproduce the OQ-10 case in one command
+
+```bash
+git show d518b74:vault/example-book/chapters/chapter-005.md
+```
+
+That is the draft with the contradiction. The live harness used this
+session was ephemeral (scratchpad); rebuilding it is ~40 lines:
+copytree the fixture to a temp dir, `load_book_config`, take the
+manifest entry for chapter 5, `run_editorial_pass(book, entry, body,
+build_providers(os.environ))`. It prints the delta; `reconcile` applies
+it. Nothing touches the committed fixture.
 
 ### Blocked / waiting on the author
 
-1. **OQ-01 is still open and still binds.** Phase 5 may be built and run
-   against `vault/example-book/` (git-recoverable). It must NOT be run
-   against any real vault until OQ-01 gives real content a restore path.
-   No real book exists yet, so this does not block the phase — but the
-   CLI must not quietly acquire the ability either.
-2. Non-blocking: author may still supply a real Requesty key
+1. **OQ-01 still binds.** Phase 5 code exists and works, and it must
+   still never run against a real vault. `canon_transaction` is NOT the
+   answer to OQ-01 — it recovers one interrupted apply, not a session an
+   author wants to undo tomorrow. No real book exists yet.
+2. **OQ-10 needs a direction** — see the two options above.
+3. Non-blocking: author may still supply a real Requesty key
    (`rqy_...`) → spike its 12 free models before any routing change.
-3. Nothing else technical blocks Phase 5. The editorial route
-   (gemini flash-lite → mistral-large) has been live-verified since
-   Session 4 and is untouched.
+4. Non-blocking, still open from Session 7: reasoning-on for the
+   EDITORIAL pass has never been measured. Now that the pass exists and
+   the ch-005 case is a known miss, this is a cheap, well-posed
+   experiment rather than a vague one (pitfalls C8/C9 apply to drafting
+   only).
 
 ### Read first
 
-1. This file, CLAUDE.md (especially invariants 1–3 and the vault
-   primitive list)
-2. decisions.md #13–25 — do not relitigate. #15/#16 (hash ownership,
-   byte-surgical flips) are the shape the append primitives must copy;
-   #22 is the no-defaults thresholds rule; #23/#24 are the rhythm block
-   and the local lane; #25 is why ch-005's hash is deliberately stale
-3. [specs.md](specs.md) §4 (fact-line grammar — the reconciler must emit
-   lines `context_builder.parse_facts` can read back), §5–7 (delta
-   schema, editorial pass, reconciliation)
-4. Pitfalls A1/A2 (delta validation, partial application) and B1
-5. [architecture.md](architecture.md) §3 (authority model) and §6
-6. [threat-model.md](threat-model.md) §6 Phase 5 checklist
-7. [adr.md](adr.md) ADR-0004 (why the fixture is the only safe target)
-   and ADR-0006 (the local lane, its offline dependency, and why its
-   provenance is weaker than a hosted lane's)
-8. pitfalls C8/C9 before touching the local server or enabling reasoning
-   for the editorial pass
+1. This file, CLAUDE.md (invariants 1–3, the vault primitive list, and
+   the two new structural facts about the editorial pass)
+2. decisions.md #13–27 — do not relitigate. #15/#16 are the shape every
+   write primitive copies; #22 is the no-defaults thresholds rule;
+   #25 is why ch-005's hash is deliberately stale; #26 is why the
+   editorial prompt is packaged rather than per-book; #27 is thread ID
+   allocation and its one honest gap
+3. [open-questions.md](open-questions.md) **OQ-10 first**, then OQ-01
+4. [specs.md](specs.md) §11 (state machine) and §8 (`next-step.md`
+   contract) for Phase 6; §12's status note for what Phase 5 actually
+   built
+5. Pitfalls A1/A2 stay live — every future canon writer answers to them
 
 ### What now exists (module map)
 
@@ -451,133 +593,83 @@ src/novel_engine/
   core/config.py        # BookConfig.load_book_config(vault_root, slug, env)
   core/outline.py       # parse_manifest(), next_target(), resolve_target()
   core/context_builder.py  # parse_facts, select_facts, previous_chapter_tail,
-                        #   recent_summaries, banned_phrases, build_prompt
-  core/vault.py         # THE ONLY WRITER. Exactly: scaffold_book,
-                        #   generated_hash, chapter_path, split_chapter_file,
-                        #   write_chapter, flip_manifest_status.
-                        #   append_fact/append_summary/append_thread/
-                        #   flip_thread_status are Phase 5 work — NOT built
-  core/errors.py        # NovelEngineError, ConfigError, ContextError, VaultError
+                        #   recent_summaries, banned_phrases, build_prompt,
+                        #   fill_template (public since Phase 5 — two callers)
+  core/vault.py         # THE ONLY WRITER. scaffold_book, generated_hash,
+                        #   chapter_path, split_chapter_file, write_chapter,
+                        #   flip_manifest_status, append_fact, append_thread,
+                        #   append_deepen_question, append_summary,
+                        #   flip_thread_status, canon_transaction.
+                        #   Still no general "write canon file" function, and
+                        #   a test asserts the exact set of public writers
+  core/errors.py        # + EditorialError (permanent, never fallback-eligible)
   core/state_machine.py # STUB — Phase 6 work
   drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs
   drafting/provenance.py# make_session_id, chapter_frontmatter, utc_timestamp
-  providers/*           # + local.py (keyless llama.cpp lane, ADR-0006);
-                        #   openai_compat now allows api_key=None and maps
-                        #   connect-refused to ModelUnavailable
-  quality/metrics.py    # compute_metrics() + the nine specs §14 metrics as
-                        #   pure functions; ChapterMetrics dataclass
-  quality/style_checks.py # parse_thresholds, judge, build_report, Threshold,
-                        #   Verdict, StyleReport, StyleCheckError,
-                        #   COMPARABLE_METRICS, THRESHOLDS_BEGIN/END.
-                        #   No numeric defaults live here, by design
-  cli/new_book.py       # uv run new-book --slug X [--vault-root D]
-  cli/write_session.py  # --book --chapter --dry-run --force; DRY_RUN=1
-  cli/check_style.py    # WORKING: check-style --book X --chapter N
-                        #   [--vault-root D]; no API key required; exit 0 even
-                        #   when metrics are out of band
-  editorial/{schema,pass_runner,reconciler}.py # STUBS — Phase 5 work
-src/novel_engine/templates/book/  # packaged scaffolder source
-vault/example-book/     # fixture: 001-002 hand-written, 003-004 generated in
-                        #   Session 5, 005 generated in Session 7 (first draft
-                        #   with the rhythm block); manifest fully written;
-                        #   style-guide.md carries a THRESHOLDS block;
-                        #   models.yaml fallback chain ends with local
-tests/                  # 16 files, 187 tests. fakes.py holds FakeProvider,
-                        #   full_providers (openrouter/nvidia/groq/local),
-                        #   text_of, reset_fixture_state
+  providers/*           # unchanged this session
+  quality/*             # unchanged this session
+  editorial/schema.py   # EditorialDelta + parse_delta(). extra="forbid";
+                        #   canon-line text guards; no origin field (A4)
+  editorial/pass_runner.py # build_editorial_prompt, run_editorial_pass,
+                        #   repair loop, EDITORIAL_PARAMS (temp 0.2).
+                        #   Returns data; writes nothing, ever
+  editorial/reconciler.py  # reconcile(book, delta, session_id) -> Reconciliation.
+                        #   The only caller of the canon appends
+  cli/{new_book,write_session,check_style}.py  # unchanged; NONE of them
+                        #   calls the editorial pass yet (Phase 6)
+src/novel_engine/templates/book/            # packaged scaffolder source
+src/novel_engine/templates/editorial-prompt.md  # engine-owned (decision #26)
+vault/example-book/     # fixture, unchanged this session — the live run used
+                        #   a temp copy, so the committed fixture still has
+                        #   chapters 001-005 with summaries for 001-002 only
+tests/                  # 19 files, 262 tests. New: test_editorial_schema.py,
+                        #   test_vault_appends.py, test_editorial_pass.py,
+                        #   test_reconciler.py
 ```
 
-Entry points (`pyproject.toml`), all three implemented:
+Entry points (`pyproject.toml`) are unchanged: `new-book`,
+`write-session`, `check-style`. There is deliberately no
+`editorial-pass` entry point — wiring the pass into a session is Phase 6
+work, and adding a CLI that can write canon on a real vault before
+OQ-01 resolves would hand the engine the ability the docs say it must
+not have.
 
-```
-new-book     = novel_engine.cli.new_book:main
-write-session = novel_engine.cli.write_session:main
-check-style  = novel_engine.cli.check_style:main
-```
-
-NOTE: the fixture manifest is fully written (001-005). To exercise
-drafting paths again, add a ch-006 row to plot-outline.md first.
-Tests never depend on live fixture state: reset_fixture_state() forces
-any copied book back to "001-002 written, 003 planned".
-
-NOTE: `src/novel_engine/templates/book/` ships the scaffolder's
-style-guide template. It does NOT carry a THRESHOLDS block — deliberately, per decision #22:
-a new book starts untuned and visibly so. If that is ever changed, the
-block must ship commented out, never with numbers.
-
-Env keys active in `.env`: gemini, openrouter, groq, mistral, nvidia,
-aihubmix (emergency lane only). The local lane needs no key and is always
-built. Routing truth: `vault/example-book/config/models.yaml`.
-
-### Batches (proposed for Phase 5)
+### Phase 6 batches (proposed)
 
 Commit after each batch. Do not push.
 
-**Batch 1 — `editorial/schema.py`**: Pydantic models for the delta
-(specs §5). Reject anything that is not exactly the schema — extra
-keys, missing provenance, malformed fact lines. Pure validation, no IO.
+**Batch 1 — `log/next-step.md` read/write**: the frontmatter contract in
+specs §8, with a vault primitive for the write (it is the one canon-
+adjacent file whose mode is *overwrite* — architecture §3 — so it needs
+its own narrowly-scoped primitive, not a general writer).
 
-**Batch 2 — vault append primitives**: `append_fact`, `append_summary`,
-`append_thread`, `flip_thread_status` in `core/vault.py`, each
-narrowly-scoped and each verifying its own write, in the shape of
-decisions #15/#16. Round-trip test: every appended fact line must parse
-back through `context_builder.parse_facts`.
+**Batch 2 — `core/state_machine.py`**: the specs §11 phases, the legal
+transitions, and persisting the phase pointer before each next phase
+begins.
 
-**Batch 3 — `editorial/pass_runner.py`**: build the editorial prompt,
-call through the router, validate the response into a delta, fail
-closed on anything invalid (invariant 2 — an invalid delta is applied
-not at all, never partially).
+**Batch 3 — resume**: re-running a session whose chapter exists resumes
+from the recorded phase or refuses with a precise message. Never
+overwrites.
 
-**Batch 4 — `editorial/reconciler.py`**: apply a validated delta through
-the primitives only, all-or-nothing, with the pre-application state
-recorded so a failure is diagnosable.
-
-### The Phase 5 test case (fixed in the vault, preserved in git)
-
-ch-005 contradicted itself — "Both of them" and, twelve paragraphs later,
-"nine corrections on the spring-tide page" — against ch-001's canonical
-two. The prose was **hand-corrected** (decision #25) so the fixture is not
-shipped knowingly wrong.
-
-The case itself is not lost. Recover the original with:
-
-```bash
-git show d518b74:vault/example-book/chapters/chapter-005.md
-```
-
-That text is the first thing the editorial pass should be pointed at: a
-real model-made contradiction against a real locked fact, which no Phase 4
-metric can see. Feed it to the reconciler and confirm the delta names the
-contradiction rather than rewriting the chapter.
-
-### Phase 5 exit criteria
-
-- [ ] pytest passes; ruff clean (every session)
-- [ ] A deliberately invalid delta leaves every canon file byte-identical
-- [ ] A partially-valid delta is applied not at all (invariant 2)
-- [ ] No model output is ever written to a canon body — only Python-built
-      lines from validated fields (invariant 1)
-- [ ] Every appended fact line round-trips through `parse_facts`
-- [ ] Ran end-to-end against `vault/example-book/` only
+**Batch 4 — wire the editorial pass into `write-session`**: draft →
+style → editorial → reconcile → complete, with the violation list
+reported as ADVISORY until OQ-10 says otherwise, and an
+`editorial-pending` exit that is visibly distinct from success.
 
 ### Do not do next session
 
-- Do not run the editorial pass against any real book (OQ-01 unresolved;
-  no real book exists yet either)
-- Do not let a model regenerate `continuity-tracker.md` or any canon
-  file body — that is invariant 1 and the reason the project exists
+- Do not run the editorial pass against any real book (OQ-01)
+- Do not present the violation list as a guarantee anywhere in the CLI
+  or the docs (OQ-10)
+- Do not let a model regenerate any canon file body (invariant 1)
 - Do not add a general "write canon file" vault primitive
-- Do not re-add aihubmix to routing (cap is lifetime, not daily)
-- Do not chase the dismissed providers without NEW evidence; reasons are
-  dated in `.env`
-- Do not wire next-step.md resume state (Phase 6)
+- Do not "fix" OQ-10 by loosening the schema or letting the model write
+  the summary paragraph straight into the tracker
+- Do not re-add aihubmix to routing; do not chase dismissed providers
+  without new evidence
 - Do not add built-in threshold defaults to `quality/` (decision #22)
-- Do not promote the local lane above groq on the current evidence — one
-  prompt, one seed (ADR-0006 alternatives)
-- Do not enable model reasoning for drafting (pitfalls C9: 2x cost, worse
-  prose, measured). Measuring it for the EDITORIAL pass is legitimate and
-  is an open experiment, not a decision
-- Do not recompute a stale `generated_hash` to make a test pass — the
-  staleness is the author-edit signal (decision #25, pitfalls B5)
-- Do not turn style metrics into a gate. They rank a threshold-passing
-  draft above a better-written one; specs §14 keeps them advisory
+- Do not promote the local lane above groq on the current evidence
+- Do not enable model reasoning for DRAFTING (pitfalls C9, measured).
+  Measuring it for the editorial pass is a legitimate open experiment
+- Do not recompute a stale `generated_hash` (decision #25, pitfalls B5)
+- Do not turn style metrics into a gate (specs §14)

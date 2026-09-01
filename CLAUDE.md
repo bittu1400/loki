@@ -104,12 +104,17 @@ ADR, never a shortcut.
 
 - **`core/vault.py` is the only module that writes to disk.** Everything
   else returns data. This is what makes the authority model reviewable.
-- **`vault.py` exposes narrowly-scoped primitives only** — as of Phase 3:
-  `scaffold_book`, `write_chapter` (create-only, hash-verified), and
-  `flip_manifest_status` (single-cell mechanical edit). The append
-  primitives the editorial reconciler will need — `append_fact`,
-  `append_summary`, `append_thread`, `flip_thread_status` — are Phase 5
-  work. There is deliberately no general "write canon file" function.
+- **`vault.py` exposes narrowly-scoped primitives only** — as of Phase 5:
+  `scaffold_book`, `write_chapter` (create-only, hash-verified),
+  `flip_manifest_status` (single-cell mechanical edit), and the canon
+  appends `append_fact`, `append_thread`, `append_deepen_question`,
+  `append_summary`, `flip_thread_status`. Five, not the four this file
+  listed before: the delta carries `deepen_questions` and the queue is
+  engine-append-only. Each verifies its own write by re-parsing the file.
+  `canon_transaction` snapshots and restores canon around a multi-file
+  apply; the only bytes it can write are bytes it just copied. There is
+  deliberately no general "write canon file" function, and
+  `test_vault_appends.py` asserts the exact set of public writers.
 - **`generated_hash` is computed by `vault.write_chapter`, never by its
   callers** — callers who supply one are rejected. It hashes the exact
   post-frontmatter bytes as stored (leading blank lines stripped,
@@ -121,6 +126,21 @@ ADR, never a shortcut.
   `vault/example-book/chapters/chapter-005.md` is deliberately edited and
   deliberately stale (decision #25); `tests/test_vault_writing.py` asserts
   both halves — unedited chapters match, edited ones must not.
+- **The editorial pass never writes.** `pass_runner` returns a validated
+  delta or a refusal; `reconciler` is the only caller of the canon
+  appends, and it runs the whole delta inside `canon_transaction` so a
+  failure at the fourth append restores the three that landed. A delta
+  is applied completely or not at all (invariant 2, pitfall A2).
+- **The editorial prompt is engine-owned** (decision #26):
+  `novel_engine/templates/editorial-prompt.md`, not per-book config. A
+  test parses the example object it shows the model through
+  `parse_delta`, so schema and prompt cannot drift apart silently.
+- **The editorial pass's continuity judgement is UNPROVEN** (OQ-10).
+  Live on the one real case it exists for, it returned an empty
+  violation list and wrote the contradiction into the summary; a
+  tightened prompt then produced a different, wrong violation. The
+  machinery is verified; the verdicts are not. Do not describe the pass
+  as a continuity guarantee.
 - **`quality/` holds no numbers.** `metrics.py` measures and never judges;
   thresholds live in each book's `canon/style-guide.md` between
   `THRESHOLDS` markers. A book with no block gets metrics and no verdicts

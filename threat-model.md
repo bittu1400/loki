@@ -324,12 +324,27 @@ Verified before a phase is marked complete in [progress.md](progress.md).
       silently block prose
 - [x] `check-style` only ever reads; it has no write path to the vault
 
-**Phase 5 — editorial** *(blocked on OQ-01)*
-- [ ] Delta schema-validated before any write
-- [ ] Append-only enforced in `vault.py`; no edit or delete path to canon
-- [ ] Fail-closed verified by a test that feeds it malformed JSON
-- [ ] `suggested_canon_patches.target_file` is never used as a write path
-- [ ] Snapshot/backup mechanism exists and is tested
+**Phase 5 — editorial** *(built against the fixture only; still blocked on
+OQ-01 for any real vault)*
+- [x] Delta schema-validated before any write — `parse_delta` is the only
+      way in, and the reconciler's signature accepts nothing else
+      (`test_editorial_schema.py`)
+- [x] Append-only enforced in `vault.py`; no edit or delete path to canon.
+      The one exception is `flip_thread_status`, which rewrites a single
+      status token and verifies the thread's text and chapter are
+      unchanged (`test_vault_appends.py`)
+- [x] Fail-closed verified by tests that feed it malformed JSON, an empty
+      object, prose-wrapped JSON, and a delta about the wrong chapter;
+      each asserts canon is byte-identical afterwards
+      (`test_editorial_pass.py`, `test_reconciler.py`)
+- [x] `suggested_canon_patches.target_file` is never used as a write path
+      — it is quoted as text in the patches report, and the schema still
+      rejects absolute paths and `..` segments as defence in depth
+- [x] Snapshot/backup mechanism exists and is tested — `canon_transaction`
+      snapshots every canon file, restores all of them on any failure, and
+      KEEPS the snapshot directory (named in the error) when it does.
+      **This covers one interrupted apply, not OQ-01**: an author who
+      wants yesterday's canon back still has no path for a real vault
 
 **Phase 7+ — automation** *(deferred)*
 - [ ] Secrets in Actions secrets, never in the repo
