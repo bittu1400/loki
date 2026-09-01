@@ -101,7 +101,25 @@ deadline pressure and the one that kills the project when it is.
 
 **Fail closed.** An invalid delta means append nothing and mark
 `editorial-pending`. A half-applied delta is worse than a lost one: it
-corrupts canon while reporting success (pitfall A2).
+corrupts canon while reporting success (pitfall A2). The mechanism is
+`vault.canon_transaction`
+([ADR-0007](adr.md#adr-0007--canon-changes-are-transactional)), not
+care: the apply is snapshotted and restored, because the failure that
+matters is the fourth append breaking after three succeeded.
+
+**An empty violation list is not evidence of a clean chapter.** Measured:
+a live editor returned `[]` on a chapter that contradicted a locked fact
+six lines above it in the same prompt, and wrote the contradiction into
+the summary (pitfalls A6/A7). Deterministic checks run first and are
+handed to the model as evidence
+([ADR-0008](adr.md#adr-0008--continuity-checking-is-not-exclusively-the-models-job));
+what the model adds on top is valuable and unverified.
+
+**A model may propose editing canon to match its own output.** Seen
+live: a delta suggesting "update the correction count to nine" so its
+chapter would stop contradicting the ledger. Suggestions are text in a
+session log, never a write path, and a contradicting chapter does not
+reconcile at all (invariant 6).
 
 **Record what actually happened.** `assigned_model` and `actual_model` are
 both written to every chapter's frontmatter, always. When a chapter's voice
@@ -219,7 +237,7 @@ actually run.
 
 ## 8. Rules that must not be softened
 
-Everything above is a convention. These five are invariants. If one is about
+Everything above is a convention. These six are invariants. If one is about
 to be broken, that is an ADR, not a shortcut.
 
 1. **No model ever writes a canon file body.** Delta only, Python appends.
@@ -229,3 +247,9 @@ to be broken, that is an ADR, not a shortcut.
 4. **`.env` is never committed.** Logs redact by allowlist.
 5. **The engine never overwrites author-written prose without `--force`
    and confirmation.**
+6. **A chapter that contradicts locked canon is not reconcilable.** A
+   delta carrying a `critical` continuity violation is refused whole —
+   the author fixes the prose or demotes the fact first
+   ([ADR-0009](adr.md#adr-0009--a-chapter-that-contradicts-locked-canon-is-not-reconcilable)).
+   Added in Session 8 after a live editorial pass flagged a
+   contradiction and proposed it as a new locked fact in the same delta.

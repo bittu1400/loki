@@ -39,8 +39,15 @@ vault/
     config/
       models.yaml             # model routing only (§9)
       pipeline.yaml           # pipeline behaviour only (§10)
-      prompt-template.md      # master prompt with named slots
+      prompt-template.md      # master DRAFTING prompt with named slots
 ```
+
+The **editorial** prompt is deliberately not in this tree. It is
+engine-owned and packaged at
+`src/novel_engine/templates/editorial-prompt.md` (decision #26): it is a
+JSON contract plus assembled evidence, with nothing creative to tune,
+and a book-local edit could break the contract silently — spending every
+repair attempt and both editor routes' quota before failing closed.
 
 **Naming rules**
 
@@ -197,6 +204,16 @@ rather than dumping a ledger that grows without bound.
 rewrites this file. That is the failure mode the whole design exists to
 prevent.
 
+**Engine behaviour (`vault.append_fact`, Phase 5).** The engine composes
+the line in Python from validated delta fields and appends it inside the
+markers. `origin` is **always `model`** — there is no parameter and no
+code path that writes `[author]`, because a model able to claim author
+origin defeats the whole point of the tag (pitfall A4). The file is
+parsed with `parse_facts` before the append (an already-malformed ledger
+is never appended to) and again afterwards, and the append is refused if
+the result is not exactly one new parsable line. An exact duplicate line
+is refused rather than silently repeated.
+
 ---
 
 ## 5. Open threads — `canon/open-threads.md`
@@ -210,6 +227,15 @@ Append plus status flip. A thread is never deleted.
 <!-- THREADS:END -->
 ```
 
+Grammar, as enforced by `vault.THREAD_LINE`:
+
+```
+- `[T-<NNN>]` `[open|resolved:ch-<NNN>]` `[ch-<NNN>]` <thread>
+```
+
+Any line inside the markers that does not match aborts the operation —
+the same loud-fail rule as the fact ledger (decision #13).
+
 Thread IDs are `T-` plus a zero-padded counter, allocated by the engine as
 one above the highest ID in the file. They are never reused under engine
 operation — the engine only appends and only flips status, so a resolved
@@ -217,6 +243,15 @@ thread keeps its line and its number (decision #27). Hand-deleting a
 thread line frees its number back; that is an author action outside the
 engine's guarantee. The engine may flip `[open]` to `[resolved:ch-NNN]`
 from a validated delta; it may not rewrite the thread text.
+
+**Engine behaviour (`vault.append_thread`, `vault.flip_thread_status`).**
+A new thread is always appended `[open]` and tagged with the chapter that
+opened it. A flip is refused unless the thread exists exactly once and is
+currently `open`; afterwards the file is re-parsed and the flip is
+rejected unless exactly one line changed and that line's ID, chapter, and
+text are byte-identical to before. `progressed` updates in a delta write
+nothing at all — a note is not a status, and the thread text is never
+rewritten. The note reaches the author through the session audit.
 
 ---
 
@@ -233,6 +268,17 @@ front — let real gaps surface during generation.
 <!-- QUEUE:END -->
 ```
 
+Grammar, as enforced by `vault.QUEUE_LINE`:
+
+```
+- `[open|answered:YYYY-MM-DD]` `[ch-<NNN>]` <question>
+```
+
+**Engine behaviour (`vault.append_deepen_question`).** The engine only
+ever appends `[open]` questions. It never writes `answered:` — that date
+is the author's word that a gap was actually closed, and no model
+inference should be able to produce it.
+
 ---
 
 ## 7. Chapter summary — `log/chapter-summary.md`
@@ -245,6 +291,17 @@ stable heading so the context builder can slice the last N deterministically.
 Kaelen reaches the siphon house before dawn and finds the regulator
 already broken…
 ```
+
+**Engine behaviour (`vault.append_summary`).** Not a marker block: the
+append goes at the end of the file and must stay in chapter order. A
+chapter that already has a summary is refused rather than given a second
+one (the context builder slices the last N headings and would otherwise
+show the same chapter twice), as is a chapter number below the highest
+already present. A summary paragraph containing a `## ` line is refused —
+it would forge a second heading in the ledger. The paragraph itself is
+model prose, which is the one place model text legitimately reaches a
+canon file: it is a *new* entry under a Python-written heading, never a
+rewrite of an existing one.
 
 ---
 
@@ -302,9 +359,14 @@ generation_params:
   seed: 20260824        # pinned where the provider supports it; ignored otherwise
 ```
 
-> **Verified reality (updated 2026-08-31):** the Gemini 2.5 family is
+> **Verified reality (updated 2026-09-01):** the Gemini 2.5 family is
 > closed to new keys; `llama-3.3-70b-versatile` no longer exists; the
-> editorial role runs on `gemini-3.5-flash-lite` → `mistral-large`. Six
+> editorial role runs on `gemini-3.5-flash-lite` → `mistral-medium-latest`
+> (decisions #28 then #31, both on the same day and both from live runs on
+> the same continuity case). **`mistral-large-latest` is dead** — 403
+> `tier_not_allowed` on the key that verified it in Session 4, while still
+> appearing in `/v1/models`: the catalog is not the entitlement
+> (pitfall C10). Six
 > lanes are live: five hosted (gemini, openrouter, groq, mistral, nvidia)
 > plus `local` (ADR-0006). cohere, z.ai, cerebras, aihubmix, and
 > tokenrouter were tried and dismissed (dated reasons in `.env`).
@@ -358,6 +420,17 @@ editorial:
 auto_publish: false
 ```
 
+**What the code actually reads (2026-09-01).** `target_words`,
+`word_tolerance`, `max_continuation_rounds`, every `context.*` key, every
+`retry.*` key, and `editorial.max_repair_attempts` are all live.
+`editorial.enabled` and `editorial.fail_closed` are **parsed and
+validated but not yet consulted**: nothing calls the editorial pass
+automatically until Phase 6 wires it into a session, and `fail_closed`
+has no false branch — failing closed is invariant 2, not a preference, so
+the key exists to make that explicit in the file rather than to switch it
+off. `auto_publish` is deferred (ADR-0001). A key that is declared and
+unread is a documented state here, never a silent one.
+
 **Why two config files.** `prompt.md` places `auto_publish` inside
 `models.yaml`. That is a category error: `auto_publish` is pipeline
 behaviour, not model routing, and mixing the two means every behaviour tweak
@@ -404,6 +477,13 @@ as OQ-03.
   next phase begins. A crash between phases is therefore always resumable.
   *(Phase 6 — v1 currently persists the chapter, manifest flip, and audit
   JSON, but not yet the phase pointer.)*
+- `editorial-pending` is reachable three ways, all of them leaving canon
+  untouched: no editor route answered, the response never validated
+  within `max_repair_attempts`, or the delta validated and reported a
+  **critical continuity violation**, which is refused whole (invariant 6,
+  ADR-0009). The third is not an error in the pipeline — it is the
+  pipeline working — and the CLI must say so differently from the other
+  two.
 - Re-running a session whose chapter already exists on disk **never
   overwrites it**. The engine resumes from the recorded phase, or refuses
   with a precise message naming the chapter and its current phase.
@@ -490,26 +570,83 @@ single byte is written. It never returns markdown file bodies.
 3. A schema failure is a **permanent** failure and must not walk the
    drafting fallback chain (see [architecture.md](architecture.md) §6).
 
-**Status (2026-09-01):** implemented as written.
-`editorial/schema.py` validates, `editorial/pass_runner.py` runs the call
-and the repair loop, `editorial/reconciler.py` applies. Two additions the
-code makes that this section did not state: anything destined for a canon
-line must be a single line free of HTML comment syntax (a fact containing
-`<!-- FACTS:END -->` would close the block it was appended inside), and
-there is no `origin` field — every fact arriving through the schema came
-from a model and is tagged `[model]` unconditionally (§4, pitfall A4).
-There is no CLI for the pass yet; wiring it into a session is Phase 6.
+### Validation rules as implemented (`editorial/schema.py`)
+
+Pydantic v2 models, `extra="forbid"` on every one of them. `parse_delta`
+is the only entry point; there is no way to build an `EditorialDelta`
+from raw text that skips it.
+
+| Rule | Why |
+|---|---|
+| **No `origin` field.** Every fact through this schema came from a model and the reconciler tags it `[model]` unconditionally | A model able to claim `[author]` makes invented canon indistinguishable from the author's in one call (pitfall A4) |
+| **Scalars required, collections default to empty.** `chapter_number`, `chapter_summary`, `next_step_note`, `beat_adherence` must be present; the five list/object fields may be omitted | A chapter that raised no violation and opened no thread is the normal case; spending a repair attempt to learn an empty list was omitted burns the scarcest quota in the stack |
+| **Unknown keys are rejected** | An unrecognised key means the model answered a different question than the one asked |
+| **Canon-line text is single-line and free of `<!--` / `-->`** — applies to `new_locked_facts[].fact`, `thread_updates.opened[].text`, and `deepen_questions[]` | A fact containing `<!-- FACTS:END -->` would close the marker block it was appended inside; a multi-line fact would not match the §4 grammar |
+| **`entity` is set if and only if `category == "character"`**, and matches `^[a-z0-9]+(-[a-z0-9]+)*$` | The composed line is `character:<id>`; an entity on a `world` fact would silently vanish |
+| **`thread_id` matches `^T-\d{3,}$`** and appears at most once across `progressed` + `resolved` | IDs are engine-allocated (§5); a thread gets one outcome per chapter |
+| **`source_chapter` may not exceed `chapter_number`**; **`resolved_in_chapter` must equal it** | A fact tagged with a future chapter would be retrieved as established canon for chapters that do not exist; a thread can only be resolved by the chapter under review |
+| **`suggested_canon_patches[].target_file` must be book-relative** — no leading `/` or `~`, no `:`, no `..` segment | Defence in depth. It is never used as a write path (threat-model §6), but the one field a model could aim at `../../.env` is the one named after a file |
+| **`parse_delta(raw, chapter_number=N)` also rejects a delta about a different chapter** | The pass reviews one chapter; a delta about another is not a repairable formatting error |
+
+`parse_delta` strips a leading ```` ```json ```` fence before parsing.
+Models wrap JSON in fences constantly, and burning a repair attempt on
+punctuation teaches nothing and costs a call. Everything else about the
+payload is validated, not repaired.
+
+Its error messages are written to be quoted straight into the repair
+prompt: they name the field path and what was wrong with it.
+
+### Status (2026-09-01)
+
+Implemented as written. `editorial/schema.py` validates,
+`editorial/pass_runner.py` runs the call and the repair loop,
+`editorial/reconciler.py` applies. **There is no CLI for the pass** —
+wiring it into a session is Phase 6, and adding one earlier would give
+the engine the ability to write canon on a real vault before OQ-01
+resolves.
+
+Repairs re-ask from the **base** prompt, never from the previous repair
+prompt: compounding them would re-send every rejected answer, which is
+backwards for a component whose job is to stop spending quota on an
+answer already known to be wrong.
+
+The editorial call runs at temperature 0.2, not the book's drafting
+temperature. The deliverable is a JSON verdict; the book's temperature
+exists to make prose less predictable.
 
 Two rules were added on live evidence the same day:
 
-- The prompt carries a **deterministic number check**
-  (`quality/continuity_numbers.py`, decision #30) beside the §14 style
-  metrics — quantities in the chapter compared against quantities in the
-  retrieved locked facts. Evidence for the model, never a gate. It is
-  what made the primary editor catch the case it had missed twice.
+- The prompt carries a **deterministic number check** (§16) beside the
+  §14 style metrics. Evidence for the model, never a gate. It is what
+  made the primary editor catch the case it had missed twice.
 - A delta reporting a **`critical` continuity violation is not
-  reconcilable** (decision #29). Found live: the editor flagged the
-  contradiction and proposed it as a new locked fact in the same delta.
+  reconcilable** (invariant 6, ADR-0009). Found live: the editor flagged
+  the contradiction and proposed it as a new locked fact in the same
+  delta.
+
+### What the reconciler does with a validated delta
+
+`editorial/reconciler.py`, and nothing else, calls the canon append
+primitives. The whole apply runs inside `vault.canon_transaction`
+(ADR-0007): all four canon files are snapshotted, and any refusal
+restores every one of them.
+
+| Delta field | Destination | Primitive |
+|---|---|---|
+| `chapter_summary` | `log/chapter-summary.md` | `append_summary` |
+| `new_locked_facts[]` | `canon/continuity-tracker.md` | `append_fact` |
+| `thread_updates.opened[]` | `canon/open-threads.md` | `append_thread` (allocates the ID) |
+| `thread_updates.resolved[]` | `canon/open-threads.md` | `flip_thread_status` |
+| `thread_updates.progressed[]` | **nothing** | — (specs §5: thread text is never rewritten) |
+| `deepen_questions[]` | `canon/deepen-queue.md` | `append_deepen_question` |
+| `suggested_canon_patches[]` | `log/sessions/<id>-patches.md` | plain text, written only after the canon change succeeded |
+| `continuity_violations[]` | **nothing** — but a `critical` one refuses the whole delta | — |
+| `next_step_note`, `beat_adherence` | not yet written anywhere (Phase 6: `log/next-step.md` and the audit record) | — |
+
+The summary is applied first deliberately: it is the append most likely
+to be refused (one paragraph per chapter, in chapter order), so
+re-reconciling an already-reconciled chapter stops before touching the
+ledgers rather than after.
 
 ---
 
@@ -524,6 +661,15 @@ editorial delta; and the final phase reached.
 **No secrets, no raw prompts containing keys, no `Authorization` headers.**
 Retry and backoff logging is the classic place an API key leaks; the logger
 redacts by allowlist, not by blocklist.
+
+**Status (2026-09-01).** `cli/write_session.py` writes session id, book
+slug, chapter number, POV, beat, final phase, assigned/actual model,
+fallback flag, continuation rounds, token totals, and one record per call
+attempt. **Style-check metric values and the raw validated delta are NOT
+yet recorded** — both belong to a session that runs the editorial pass,
+and nothing does until Phase 6. When they are added, the delta is the
+only place a `progressed` thread note ever reaches the author, so it is
+not optional.
 
 ---
 
@@ -578,6 +724,11 @@ humans and the drafting model:
 Verdict statuses are `ok` / `low` / `high`. Out-of-band metrics never
 change the exit code.
 
+The style checks are not the only deterministic pass. §16 adds a number
+check that compares quantities in the chapter against quantities in the
+locked facts — same discipline (measure, never judge, hand the result to
+whoever needs it), different subject: style versus continuity.
+
 ---
 
 ## 15. CLI surface (v1)
@@ -622,11 +773,81 @@ frontmatter, not from config. It exits 0 whenever the chapter was
 measured, including when metrics fall outside their bands, and 1 only on
 a real error (missing chapter or style guide, malformed thresholds).
 
-*(Status as of 2026-08-31: `new-book`, `write-session`, and
+*(Status as of 2026-09-01: `new-book`, `write-session`, and
 `check-style` are fully implemented; `--resume` waits for the Phase 6
-state machine.)*
+state machine. There is deliberately **no editorial CLI entry point** —
+`editorial/pass_runner.py` and `editorial/reconciler.py` exist and are
+tested, but nothing invokes them from a shell. Wiring them into
+`write-session` is Phase 6, and doing it earlier would hand the engine
+the ability to write canon on a real vault while OQ-01 is unresolved.)*
 
 `--dry-run` is not a nicety. Prompt tuning is the highest-iteration activity
 in the project and the free-tier quota is the hardest constraint on it;
 being able to iterate on the assembled prompt for free is what makes tuning
 affordable at all.
+
+---
+
+## 16. Deterministic number check — `quality/continuity_numbers.py`
+
+Added 2026-09-01 (decision #30,
+[ADR-0008](adr.md#adr-0008--continuity-checking-is-not-exclusively-the-models-job)).
+The §14 checks measure *style*; this one measures a *continuity* fact —
+the single class of continuity error a regex can find without judgement:
+a locked fact says the page carries **two** corrections and the chapter
+says **nine**.
+
+Like §14 it measures and never judges. Its findings are evidence handed
+to the editorial prompt, never a gate on a chapter and never an exit
+code.
+
+**Inputs:** the locked facts already **retrieved** for this chapter (the
+same list the model is shown, so a finding always points at something
+the prompt actually contains) and the chapter body.
+
+**Algorithm**
+
+1. Extract `(noun, value)` pairs from a fact or a sentence: a quantity —
+   digits `\d{1,4}` or a number word from `one`…`ninety`, `hundred` —
+   immediately followed by the thing it counts. The noun is crudely
+   singularised by dropping a trailing `s`, so "nine corrections" and
+   "a correction" compare equal. A quantity followed by another number
+   word ("two hundred") is skipped.
+2. For each sentence of the chapter's prose paragraphs (headings, lists
+   and block quotes excluded, reusing §14's tokenisation), compare every
+   `(noun, value)` against every `(noun, value)` from the facts.
+3. Report a conflict when the nouns match and the values differ — subject
+   to both guards below.
+
+**False-positive guards.** Both are tuned to failures that actually
+happened on ch-005, not to theory.
+
+- **Two shared distinctive words.** The fact and the chapter sentence
+  must share at least `MIN_CORROBORATING_WORDS` (2) words of four or
+  more letters, excluding a stoplist and excluding the counted noun
+  itself. One shared word was measured to be too weak: it passed all
+  three "years" conflicts in ch-005 through, including the exact false
+  positive a live editor model reported ("kept the ledger eleven years"
+  against "twelve years of them, bound in oilcloth").
+- **Same-sentence agreement wins.** A sentence that also states the
+  canonical value for that noun is treated as consistent — "eleven years
+  of his tenure, then one year of his predecessor" agrees with canon and
+  counts a second thing beside it.
+
+**Output.** `NumberConflict(noun, fact_value, chapter_value, fact_text,
+chapter_sentence)`, rendered into the `{{number_findings}}` slot of the
+packaged editorial prompt. When there are none, the slot says so
+explicitly — an empty result is evidence too, and the prompt states that
+it means only that no bare number disagreed.
+
+**Deliberately out of scope, permanently:** rewritten quantities ("a
+handful", "half a dozen"), numbers separated from their noun by more
+than one word, and every non-numeric contradiction — names, dates,
+orderings, capabilities. Those are OQ-10's remaining scope and belong to
+the model, or to a later deterministic layer.
+
+**Regression contract.** `tests/test_continuity_numbers.py` asserts
+exactly one finding on the pre-fix ch-005 (`git show d518b74:...`) and
+**zero on every committed chapter**, including the hand-corrected one. A
+loosened guard that starts crying wolf fails the suite rather than
+training the author to ignore findings.

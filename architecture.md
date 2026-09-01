@@ -90,7 +90,8 @@ allowed to write what?*
 | `log/chapter-summary.md` | Engine | **Append only** | Chronological ledger |
 | `log/next-step.md` | Engine | Overwrite | Pure operational pointer, no history value |
 | `log/sessions/*.json` | Engine | Create once, immutable | Audit record of what actually happened |
-| `canon/plot-outline.md` | **Author only** | Engine may suggest, never write | High-stakes structural artifact |
+| `log/sessions/<id>-patches.md` | Engine | Create once | Model suggestions about author-owned files, as text; never a write path (threat-model T4) |
+| `canon/plot-outline.md` | **Author only**, with ONE exception | Engine flips a single `status` cell; never writes prose, beats, or rows | High-stakes structural artifact — the exception is mechanical and byte-verified (decision #16, specs §2) |
 | `characters/*.md` | **Author only** | Engine may suggest, never write | High-stakes; voice depends on these |
 | `canon/story-bible.md` | **Author only** | Never touched by engine | Premise and themes are not the model's business |
 | `canon/style-guide.md` | **Author only** | Engine may suggest | See §7, the feedback loop |
@@ -101,6 +102,17 @@ Two rules generalise the whole table:
 - **The engine never overwrites a file that contains author-written prose.**
 - **Every engine write to canon is an append of a new line, computed in
   Python from a validated delta — never a model-emitted file body.**
+
+Two clarifications the table does not carry on its face:
+
+- The **drafting** prompt template lives in each book's `config/` and is
+  author-owned like the rest of that directory. The **editorial** prompt
+  does not: it is engine-owned and packaged with the code (decision #26),
+  because it is a JSON contract rather than a creative artifact.
+- `log/chapter-summary.md` is engine-append-only, and its paragraph is
+  model prose. That is the single place model text legitimately enters a
+  canon file — as a new entry under a Python-written heading, never as a
+  rewrite of an existing one (specs §7).
 
 The second rule exists because of the single most likely way this project
 fails. If the editorial model is asked to "return the updated
@@ -139,22 +151,31 @@ The model therefore emits a **delta**, and Python appends.
  7. PERSIST     Write chapters/chapter-XXX.md with provenance frontmatter
                 recording which model actually served it. Status: drafted.
 
- 8. INSPECT     Run deterministic style checks in pure Python. Zero API
-                cost. Results feed the session report and are handed to the
-                editorial pass as evidence rather than re-derived by an LLM.
+ 8. INSPECT     Run deterministic checks in pure Python, zero API cost:
+                the §14 style metrics AND the §16 number check, which
+                compares quantities in the chapter against quantities in
+                the retrieved locked facts. Both feed the session report
+                and are handed to the editorial pass as evidence rather
+                than re-derived by an LLM.
 
- 9. EDITORIAL   Send chapter + continuity tracker + style guide + the beat
-                it was supposed to hit + the POV's character sheet to the
-                editor model. Require a strict JSON delta. Validate with
-                Pydantic. On invalid output: repair-and-retry, then FAIL
-                CLOSED — leave the chapter at status editorial-pending and
-                apply nothing.
+ 9. EDITORIAL   Send retrieved locked facts + open threads + the beat it
+                was supposed to hit + the POV's character sheet + style
+                guide + step 8's findings + the chapter to the editor
+                model. Require a strict JSON delta. Validate with Pydantic.
+                On invalid output: repair-and-retry from the BASE prompt,
+                then FAIL CLOSED — leave the chapter at editorial-pending
+                and apply nothing.
 
-10. RECONCILE   Apply the validated delta deterministically: append new
-                locked facts, append the summary paragraph, flip thread
-                statuses, append deepen-queue gaps. Write suggested patches
-                for plot-outline and character sheets to a session file —
-                never to the targets themselves, and never to stdout.
+10. RECONCILE   REFUSE outright if the delta reports a critical continuity
+                violation (invariant 6, ADR-0009) — the chapter contradicts
+                canon and an author has to resolve it. Otherwise apply the
+                validated delta deterministically inside a snapshot
+                (ADR-0007): append the summary paragraph, append new locked
+                facts, open threads, flip thread statuses, append
+                deepen-queue gaps — all of it or none of it. Write
+                suggested patches for plot-outline and character sheets to
+                a session file, never to the targets themselves, and never
+                to stdout.
 
 11. REPORT      Write log/sessions/<session-id>.json. Print a human summary.
                 Set chapter status to pending-review. Update next-step.md.
@@ -162,6 +183,15 @@ The model therefore emits a **delta**, and Python appends.
 
 Step 9's fail-closed behaviour matters more than it looks. A half-applied
 delta is worse than no delta: it corrupts canon while reporting success.
+
+**Implementation status (2026-09-01).** Steps 1, 3–7 and 11 (minus the
+`next-step.md` update) run today from `write-session`. Steps 8–10 exist
+as tested library code — `quality/`, `editorial/pass_runner.py`,
+`editorial/reconciler.py` — but **nothing calls them from a CLI yet**;
+`check-style` runs step 8's style half on demand. Step 2 is a stub.
+Wiring 8–10 into the session and persisting the phase pointer is Phase 6,
+and doing it earlier would give the engine a way to write canon on a real
+vault while OQ-01 is unresolved.
 
 ## 5. Context assembly — what the model actually sees
 
@@ -203,12 +233,15 @@ to prevent.
 
 ## 6. Provider layer
 
-Six provider modules, one interface (gemini, openrouter, groq, mistral,
-nvidia, aihubmix — built and live-verified in Phase 2; cohere/z.ai/
-cerebras/github-models/chutes/siliconflow/nanogpt/fireworks/portkey were
-evaluated and dismissed, see OQ-02, decisions.md #11-12; requesty has no
-valid key yet). Five of the six share an OpenAI-compatible wire format and
-one parameterised class serves them all. The router normalises every
+Seven provider modules, one interface: gemini, openrouter, groq, mistral,
+nvidia, aihubmix (built and live-verified in Phase 2; aihubmix demoted out
+of routing the same day, decisions #12), plus `local` (Session 7,
+[ADR-0006](adr.md#adr-0006--local-model-lane)). cohere, z.ai, cerebras,
+github-models, chutes, siliconflow, nanogpt, fireworks, portkey, and
+tokenrouter were evaluated and dismissed — see OQ-02 and decisions #11,
+#12, #21; requesty has no valid key yet. **Six of the seven share an
+OpenAI-compatible wire format** and one parameterised class serves them
+all; only Gemini needs its own adapter. The router normalises every
 response into one of five outcomes:
 
 | Outcome | Fallback eligible? |
@@ -246,6 +279,12 @@ Three provider-specific realities the layer must absorb:
   therefore configuration data validated at startup, never constants in
   code, and the model that *actually* served a chapter is recorded in that
   chapter's frontmatter.
+- **A listing is not an entitlement.** `mistral-large-latest` — verified
+  live in Session 4 and written into `models.yaml` as the editorial
+  fallback — began returning `403 tier_not_allowed` while still appearing
+  in that provider's `/v1/models`. A catalog probe would have said it was
+  fine. Only a real generation call proves a lane, and a fallback lane is
+  by definition the one nothing exercises (pitfall C10).
 
 ## 7. Quality loops
 
@@ -270,6 +309,27 @@ canon within twelve paragraphs. The metrics measure AI-prose *tells*, not
 quality — which is why specs §14 keeps them advisory, and why promoting
 them to a gate would be a mistake dressed as rigour. Contradiction is the
 editorial pass's job (§6); voice is the author's.
+
+**Deterministic continuity check (Phase 5 — built, and a revision of the
+sentence above).** "Contradiction is the editorial pass's job" was
+measured and found half true. Given a chapter saying "nine corrections"
+against a locked fact saying two — with that fact in the same prompt —
+the editor returned an empty violation list, twice, and wrote the
+contradiction into the summary. So the narrowest slice of the job moved
+into Python: `quality/continuity_numbers.py` compares quantities in the
+chapter against quantities in the retrieved facts, and its findings go
+into the editorial prompt as evidence
+([ADR-0008](adr.md#adr-0008--continuity-checking-is-not-exclusively-the-models-job),
+specs §16). With the finding in front of it, the same model caught the
+same case on both later runs.
+
+The division is now: **Python finds what is mechanical** (style tells,
+number disagreements), **the model judges what is not** (does this
+contradict, did the beat land, what is newly true), and **neither is a
+gate** — style verdicts are advisory, and the one thing that does stop
+the pipeline is a critical violation blocking reconciliation
+([ADR-0009](adr.md#adr-0009--a-chapter-that-contradicts-locked-canon-is-not-reconcilable)),
+which is a canon-integrity rule rather than a quality judgement.
 
 **The author-edit feedback loop (Phase 6+).** When the author edits a
 generated chapter, that diff is the highest-quality voice signal the system
@@ -296,7 +356,10 @@ src/novel_engine/
     outline.py           # manifest parsing; next_target(), resolve_target()
     context_builder.py   # fact parsing/retrieval by entity; verbatim tail;
                          #   template slot filling in file order
-    errors.py            # NovelEngineError, ConfigError, ContextError, VaultError
+    errors.py            # NovelEngineError, ConfigError, ContextError,
+                         #   VaultError, EditorialError. (ManifestError
+                         #   subclasses ConfigError and lives in outline.py,
+                         #   next to the parser that raises it)
     state_machine.py     # STUB — Phase 6
   providers/
     base.py              # abstract provider; five normalised outcome types

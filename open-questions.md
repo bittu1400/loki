@@ -341,9 +341,19 @@ built. If the destination is private or personal, this closes immediately.
 editorial pass per chapter — more calls against the tightest-rationed model
 in the stack than a batched approach would need. Phase 4's deterministic
 style checks mitigate this by removing the largest category of work from the
-LLM pass, but if `gemini-2.5-pro`'s free tier turns out to be very tight
-(OQ-02), an every-other-chapter cadence for the *continuity* pass may be
-forced.
+LLM pass, and Phase 5's number check (specs §16) removes a slice of the
+continuity work too, so the pass is cheaper per chapter than this question
+assumed.
+
+**Updated 2026-09-01.** The model named here originally
+(`gemini-2.5-pro`) is unobtainable and the editorial route is now
+`gemini-3.5-flash-lite` → `mistral-medium-latest` (decision #31). One
+measured data point on cost: a full editorial pass over a ~1500-word
+chapter cost 3708 input / 476 output tokens on flash-lite and 3457 /
+1091 on mistral-medium. Nothing has hit a quota ceiling yet because
+nothing runs the pass automatically — that starts in Phase 6, which is
+when this question becomes answerable with real numbers instead of
+guesses.
 
 **Scope.** Only the cadence of the LLM editorial pass. Deterministic style
 checks are free and always run every chapter.

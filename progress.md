@@ -204,6 +204,61 @@ nine" — the model proposing to edit the author's canon to match its
 chapter. It went nowhere, because suggestions are text in a log and
 `reconcile` had already refused the delta.
 
+### Documentation pass (end of session)
+
+Every doc audited line by line against the code, not just updated where
+the new code touched. Three claims were **false before this session
+started** and are now fixed:
+
+- architecture §3's authority table said the engine never writes
+  `canon/plot-outline.md`. It flips one `status` cell and has since
+  Phase 3 (decision #16). The row now says so, and says what it still
+  may not touch.
+- architecture §6 counted "six provider modules ... five of the six
+  share an OpenAI-compatible wire format". There are seven and six since
+  ADR-0006 added the local lane in Session 7.
+- specs §9's verified-reality note still named `mistral-large` as the
+  editorial fallback, and OQ-08 still reasoned about `gemini-2.5-pro`'s
+  quota — a model that has been unobtainable since Session 4.
+
+New this session:
+
+- **[ADR-0007](adr.md#adr-0007--canon-changes-are-transactional)** —
+  canon changes are transactional. The mechanism behind invariant 2,
+  with the scoping that keeps a file-restoring function honest inside
+  the module whose rule is "no general canon writer".
+- **[ADR-0008](adr.md#adr-0008--continuity-checking-is-not-exclusively-the-models-job)**
+  — continuity checking is not exclusively the model's job. The full
+  evidence chain from "the pass returned `[]`" to "Python finds what is
+  mechanical, the model judges what is not".
+- **[ADR-0009](adr.md#adr-0009--a-chapter-that-contradicts-locked-canon-is-not-reconcilable)**
+  — a contradicting chapter is not reconcilable, and why there is no
+  override flag.
+- **Invariant 6** added to best-practices §8 and CLAUDE.md. The first
+  new invariant since the project started; ADR-0009 is its record.
+- **specs §16** — the number check gets a real spec: algorithm, both
+  tuned guards with the measurements behind them, what is permanently
+  out of scope, and the regression contract its tests enforce.
+- **specs §12** rewritten from a status note into the actual validation
+  contract — a rule-and-why table matching `schema.py` line for line,
+  plus a delta-field-to-destination table for the reconciler.
+- **specs §4-§7** gained "Engine behaviour" blocks: what each append
+  primitive refuses and re-parses, why `origin` is always `model`, why
+  the engine never writes `answered:`, and why `progressed` writes
+  nothing.
+- **pitfalls A6, A7, C10** — the three measured failures of this
+  session, written as traps rather than as history: an empty violation
+  list read as a clean chapter, the pass proposing its own contradiction
+  as canon, and a verified model leaving your tier while still appearing
+  in the catalog.
+- **threat-model T1/T4** — residual risk sharpened with what was
+  actually observed, including the delta that suggested editing canon so
+  its chapter would stop being wrong.
+- **CLAUDE.md** gained two working rules this session earned:
+  *supersede, do not defend* (#28 lived four hours) and *verify doc
+  claims against the code before repeating them* (see the three false
+  claims above).
+
 ### Not done / not attempted
 
 - No CLI for the editorial pass. Nothing calls `pass_runner` or
@@ -644,9 +699,18 @@ one finding on the pre-fix ch-005, zero on every committed chapter.
    are the three rules that came out of the live editorial runs
 3. [open-questions.md](open-questions.md) **OQ-10 first**, then OQ-01
 4. [specs.md](specs.md) §11 (state machine) and §8 (`next-step.md`
-   contract) for Phase 6; §12's status note for what Phase 5 actually
-   built
-5. Pitfalls A1/A2 stay live — every future canon writer answers to them
+   contract) for Phase 6. §12 is now the full validation contract as
+   implemented, §16 specifies the number check, and §4-§7 carry an
+   "Engine behaviour" block each — read the one for whatever you are
+   about to touch
+5. [adr.md](adr.md) **ADR-0007, 0008, 0009** — this session's three
+   architectural records: transactional canon writes, why continuity
+   checking is partly Python's job now, and why a contradicting chapter
+   cannot reconcile
+6. Pitfalls A1/A2 stay live — every future canon writer answers to them.
+   **A6, A7 and C10 are new** and all three are measured, not
+   hypothetical
+7. best-practices §8 now lists **six** invariants, not five
 
 ### What now exists (module map)
 
@@ -661,7 +725,7 @@ src/novel_engine/
                         #   chapter_path, split_chapter_file, write_chapter,
                         #   flip_manifest_status, append_fact, append_thread,
                         #   append_deepen_question, append_summary,
-                        #   flip_thread_status, canon_transaction.
+                        #   flip_thread_status, canon_transaction (ADR-0007).
                         #   Still no general "write canon file" function, and
                         #   a test asserts the exact set of public writers
   core/errors.py        # + EditorialError (permanent, never fallback-eligible)
@@ -671,8 +735,9 @@ src/novel_engine/
   providers/*           # unchanged this session
   quality/metrics.py, style_checks.py   # unchanged this session
   quality/continuity_numbers.py  # find_number_conflicts(facts, body),
-                        #   render_conflicts(). Decision #30. Tuned
-                        #   false-positive guards — see its docstring
+                        #   render_conflicts(), quantities(). Decision #30,
+                        #   ADR-0008, specs §16. Tuned false-positive
+                        #   guards — read the docstring and specs §16
                         #   before touching them
   editorial/schema.py   # EditorialDelta + parse_delta(). extra="forbid";
                         #   canon-line text guards; no origin field (A4)
@@ -732,7 +797,10 @@ reported as ADVISORY until OQ-10 says otherwise, and an
   re-running the test that asserts zero findings on every committed
   chapter — both guards are tuned to failures that actually happened
 - Do not add an override that lets a critical-violation delta reconcile
-  (decision #29)
+  (invariant 6, ADR-0009). If it must change, that is a new ADR
+- Do not re-add `mistral-large-latest` anywhere: 403 `tier_not_allowed`,
+  still listed in `/v1/models` (pitfall C10). Probe any fallback lane
+  with a real generation call, never a catalog listing
 - Do not let a model regenerate any canon file body (invariant 1)
 - Do not add a general "write canon file" vault primitive
 - Do not "fix" OQ-10 by loosening the schema or letting the model write

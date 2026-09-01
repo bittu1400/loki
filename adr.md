@@ -468,3 +468,223 @@ route in the stack that no third party can revoke.
   clearly beats minimax-m3.
 - **No lane, keep the spike script.** Rejected: a quota emergency is
   exactly when nobody wants to go find a shell script.
+
+---
+
+## ADR-0007 — Canon changes are transactional
+
+**Date:** 2026-09-01 · **Status:** accepted · **Session:** 8
+
+### Context
+
+Invariant 2 says a delta is applied completely or not at all. Until
+Phase 5 that was a policy with no mechanism behind it, because nothing
+wrote to canon.
+
+Applying a delta is not one write. It is a summary appended to the
+ledger, N facts appended to the tracker, M threads opened, K threads
+flipped, and J questions queued — across four files. Each primitive
+verifies its own write, so a bad write cannot land. What no primitive
+can see is the *fourth* append failing after the first three succeeded:
+a thread ID that does not exist, a summary that duplicates one already
+present, a disk that fills. Canon is then in a state matching no
+session, no chapter, and no audit record, while the run reports partial
+success — pitfall A2 exactly.
+
+### Decision
+
+`vault.canon_transaction(paths)` — a context manager that copies every
+canon file it is given to a scratch directory, yields, and on **any**
+exception restores all of them and re-raises as `VaultError`. The
+reconciler runs the entire apply inside it.
+
+Two properties make this safe to have in a codebase whose central rule
+is that no model writes a canon body:
+
+- **The only bytes it can write are bytes it read from the same file
+  moments earlier.** There is no path from model output to a restore.
+- **On failure it KEEPS the snapshot directory and names it in the
+  error.** A restore that itself failed is diagnosable rather than
+  silent.
+
+### Consequences
+
+- Invariant 2 becomes a mechanism instead of an aspiration, and the
+  failure paths are the tested ones — a delta that fails at the fourth
+  step leaves canon byte-identical.
+- Canon files are copied on every reconcile. At vault sizes this project
+  will ever see, that cost is invisible.
+- **It is not a resolution of OQ-01.** It recovers one interrupted
+  apply. It does not give an author yesterday's canon back, and nothing
+  in it survives the process exiting between the restore and the raise.
+- It is a general file-restoring function living in the module whose
+  rule is "no general canon writer". The scoping above is what keeps
+  that honest, and it is the first thing to re-check if the function
+  ever grows a parameter.
+
+### Alternatives considered
+
+- **Pre-flight validation only** — check every thread ID and summary
+  slot before writing anything. Cheaper, and it would have caught the
+  common cases. Rejected as the *only* mechanism: it cannot catch a
+  disk error, and "we validated hard enough" is how half-applied state
+  arrives in every system that has it.
+- **Write to temp files and rename at the end.** Atomic per file, and
+  genuinely better if the four files were being rewritten wholesale.
+  They are not — each primitive appends one line and re-parses to prove
+  it, and staging that would mean reimplementing every primitive
+  against a shadow tree.
+- **Accept partial application and report it.** Rejected by invariant 2,
+  and by pitfall A2's argument that a partial apply is worse than a
+  lost one because it reports success.
+
+---
+
+## ADR-0008 — Continuity checking is not exclusively the model's job
+
+**Date:** 2026-09-01 · **Status:** accepted · **Session:** 8
+
+### Context
+
+The editorial pass exists to catch what a human re-reader would not.
+Its first real test was the original ch-005 (`git show d518b74:...`),
+which says "nine corrections on the spring-tide page" against ch-001's
+locked fact that the page carries **two**. That fact was retrieved into
+the prompt, six lines above the chapter text.
+
+`gemini-3.5-flash-lite` returned an empty violation list, and the
+chapter summary it wrote — which the reconciler appends to canon —
+repeated "nine corrections". A tightened prompt made it perform a
+check and report a *different*, wrong violation. `mistral-medium-latest`
+caught it unaided, at 2.7x the output tokens and with 8-9 proposed facts
+including set dressing.
+
+Two things were now true at once: the machinery was verified end to end,
+and a pass returning `[]` was indistinguishable from a clean chapter.
+
+### Decision
+
+Move the narrowest, most mechanical slice of continuity checking into
+Python, and hand its findings to the model as evidence.
+
+`quality/continuity_numbers.py` compares quantities in the chapter
+against quantities in the **retrieved** locked facts — the same set the
+model is shown — and renders the disagreements into the editorial
+prompt beside the Phase 4 style metrics. It is evidence, never a gate,
+and never a verdict on prose (specs §14's rule, extended).
+
+### Consequences
+
+- With the finding in its prompt, the model that missed the case twice
+  caught it on both subsequent runs. That let routing go back to the
+  cheaper editor (decision #31) — the judgement now lives partly in
+  code, where no free tier can withdraw it.
+- The check is free, runs every chapter, and works identically whichever
+  editor answers, including a fallback lane that demonstrably misses
+  things.
+- **Its false-positive guards are tuned to measured failures, not to
+  theory.** One shared word between the fact and the chapter sentence
+  let all three "years" conflicts in ch-005 through — including the
+  exact false positive the live model reported — so it requires two; and
+  a sentence that also states the canonical number is treated as
+  consistent. Both thresholds are string-matching sensitivity, not
+  creative constants, so decision #22 does not apply.
+- The tuning is the maintenance burden. A fixture test asserts one
+  finding on the pre-fix ch-005 and zero on every committed chapter, so
+  a loosened guard that starts crying wolf fails the suite rather than
+  training the author to ignore findings.
+- **Only bare numbers are covered.** Names, dates, orderings, rewritten
+  quantities ("half a dozen"), and capabilities are untouched, and there
+  is no evidence yet about whether a model catches those (OQ-10's
+  remaining scope).
+
+### Alternatives considered
+
+- **Better prompt only.** Tried first, measured, and insufficient: it
+  changed behaviour without changing accuracy.
+- **Stronger model only** (keep mistral-medium primary). It works, and
+  it is the only model that has caught a contradiction unaided — kept as
+  the fallback for exactly that reason. Rejected as the primary answer
+  because it puts the project's core guarantee on someone else's free
+  tier, at 2.7x tokens, with a fact list that grows the ledger.
+- **Ask fact-by-fact** — one call per locked fact, or a per-fact verdict
+  list in the schema. N× the quota on the tightest-rationed model in the
+  stack, to do deterministically what a regex does for free on the
+  commonest class.
+- **Accept and re-scope the feature** — call the pass a summariser and
+  fact-proposer and stop claiming it catches contradictions. Honest and
+  free; rejected because it gives up the feature the project was built
+  around without first trying the cheap engineering.
+
+---
+
+## ADR-0009 — A chapter that contradicts locked canon is not reconcilable
+
+**Date:** 2026-09-01 · **Status:** accepted · **Session:** 8
+
+### Context
+
+In the live run that first caught the ch-005 contradiction,
+`mistral-medium-latest` returned a delta that flagged "nine corrections"
+against the locked "two" as a **critical** violation and, in the same
+object, proposed:
+
+```json
+{ "category": "object", "entity": "",
+  "fact": "The spring-tide almanac page carries nine corrections in Ovist's hand that he did not write.",
+  "source_chapter": 5 }
+```
+
+Nothing in the reconciler stopped that. A later run went further and
+suggested a canon patch reading "Update the spring-tide almanac page
+correction count to nine" — the model proposing to edit the author's
+canon so the contradiction would stop being one.
+
+The pass that detects a contradiction was the fastest route for that
+contradiction to become canon.
+
+### Decision
+
+`reconcile()` refuses a delta carrying any `critical` continuity
+violation, before the transaction opens. Nothing is appended, no patches
+report is written, the chapter stays `editorial-pending`, and the error
+names the violated fact, the chapter text, and what a human has to do.
+
+**There is no override flag.** The fix is an author action either way —
+correct the prose, or demote the fact the prose disagrees with — after
+which the pass re-runs cleanly. A caller able to skip the check would
+only ever use it to write the thing the check exists to stop.
+
+Warnings remain advisory and reconcile normally.
+
+### Consequences
+
+- A critical violation can no longer become canon by any route: not as a
+  fact, not as a summary paragraph, not as a thread.
+- **A false-positive critical violation blocks reconciliation until a
+  human looks.** That is a real cost, and it is the right direction to
+  fail: the alternative is canon that quietly disagrees with itself.
+  Live evidence says both editors over-report as readily as they
+  under-report, so this will fire on chapters that are fine.
+- The engine now has a state where a drafted, style-checked chapter
+  cannot complete without an author. Phase 6 must surface that as a
+  distinct outcome, not as a generic error.
+- Severity is chosen by the model, so the boundary between "blocks
+  everything" and "advisory" is a model's word. `warning` is the safe
+  default for anything the editor is unsure about, and the prompt says
+  so.
+
+### Alternatives considered
+
+- **Drop only the contradicting facts, apply the rest.** Requires
+  matching model text against model text to decide which fact a
+  violation refers to, and it half-applies a delta the model itself says
+  describes a broken chapter — invariant 2 in spirit if not in letter.
+- **Append everything; the `[model]` origin tag makes it demotable**
+  (pitfall A4). Zero code. Rejected because retrieval would then feed
+  both sides of the contradiction into the next chapter's prompt, which
+  is how one wrong number becomes three chapters of wrong plot.
+- **Refuse only when the violated fact is `[author]`-origin.** Tempting
+  and more surgical. Rejected for now: it makes the rule depend on a
+  distinction the author has not yet had reason to maintain, and no case
+  exists to tune it against.

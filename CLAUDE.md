@@ -51,6 +51,23 @@ conversation and record it later.
 
 **No sub-agents.** All work inline. Do not dispatch the Agent tool.
 
+**Supersede, do not defend.** A decision is only as good as the evidence
+under it. Decision #28 lived four hours: it routed editorial to a
+stronger model because the cheaper one missed a contradiction, and #31
+reversed it the same day once a deterministic check made the cheaper one
+catch that same case. Write the new decision, mark the old one
+superseded, and leave both in the ledger — the pair is more useful than
+either row alone. This applies to docs as much as code: a doc sentence
+that measurement has falsified gets rewritten with the measurement, not
+quietly deleted.
+
+**Verify doc claims against the code before repeating them.** This
+repository's docs are load-bearing and they do drift: a full audit on
+2026-09-01 found the authority table claiming the engine never writes
+`plot-outline.md` (it flips one status cell), the provider layer counting
+six modules when there were seven, and a dead model still named as the
+editorial fallback. Grep the code before trusting a sentence about it.
+
 **One phase per session.** Work in batches within the phase. Complete each
 batch fully. Do not start the next phase because the current one finished
 early.
@@ -82,7 +99,7 @@ its exit criteria were actually run and passed.
 ## Invariants
 
 From [best-practices.md](best-practices.md) §8. Breaking one of these is an
-ADR, never a shortcut.
+ADR, never a shortcut. There are six.
 
 1. **No model ever writes a canon file body.** The editorial model emits a
    schema-validated delta; Python appends. A model regenerating
@@ -97,6 +114,11 @@ ADR, never a shortcut.
 4. **`.env` is never committed. Logs redact by allowlist, not blocklist.**
 5. **The engine never overwrites author-written prose** without `--force`
    and explicit confirmation.
+6. **A chapter that contradicts locked canon is not reconcilable.** A
+   delta carrying a `critical` continuity violation is refused whole
+   (ADR-0009). Added Session 8, after a live pass flagged a contradiction
+   and proposed it as a new locked fact in the same delta. No override
+   flag exists, and adding one would be an ADR.
 
 ---
 
@@ -106,15 +128,18 @@ ADR, never a shortcut.
   else returns data. This is what makes the authority model reviewable.
 - **`vault.py` exposes narrowly-scoped primitives only** — as of Phase 5:
   `scaffold_book`, `write_chapter` (create-only, hash-verified),
-  `flip_manifest_status` (single-cell mechanical edit), and the canon
-  appends `append_fact`, `append_thread`, `append_deepen_question`,
-  `append_summary`, `flip_thread_status`. Five, not the four this file
-  listed before: the delta carries `deepen_questions` and the queue is
-  engine-append-only. Each verifies its own write by re-parsing the file.
-  `canon_transaction` snapshots and restores canon around a multi-file
-  apply; the only bytes it can write are bytes it just copied. There is
-  deliberately no general "write canon file" function, and
-  `test_vault_appends.py` asserts the exact set of public writers.
+  `flip_manifest_status` (single-cell mechanical edit), and five canon
+  appends: `append_fact`, `append_thread`, `append_deepen_question`,
+  `append_summary`, `flip_thread_status`. Five rather than the four
+  originally planned — the delta carries `deepen_questions` and the queue
+  is engine-append-only, so the reconciler cannot apply a valid delta
+  without the fifth. **Each verifies its own write by re-parsing the
+  file**, not by trusting the string it built. `canon_transaction`
+  (ADR-0007) snapshots and restores canon around a multi-file apply; the
+  only bytes it can write are bytes it just copied. There is deliberately
+  no general "write canon file" function, and `test_vault_appends.py`
+  asserts the exact set of public writers — add a primitive and that test
+  fails until the list is updated on purpose.
 - **`generated_hash` is computed by `vault.write_chapter`, never by its
   callers** — callers who supply one are rejected. It hashes the exact
   post-frontmatter bytes as stored (leading blank lines stripped,
@@ -159,6 +184,13 @@ ADR, never a shortcut.
   `THRESHOLDS` markers. A book with no block gets metrics and no verdicts
   — there are no built-in numeric defaults anywhere in code (decision
   #22), and adding one would put a creative constant in the engine.
+- **Editorial routing changed twice on 2026-09-01 and the pair is worth
+  reading together** (decisions #28 then #31). It is now
+  `gemini:gemini-3.5-flash-lite` → `mistral:mistral-medium-latest`.
+  `mistral-large-latest` is DEAD — 403 `tier_not_allowed` on the key that
+  verified it, while still listed in `/v1/models`. Probe a fallback lane
+  with a real generation call before trusting it; a catalog listing
+  proves nothing (pitfall C10).
 - **The `local` provider needs no key and is always built.** It is the
   only entry in `core.config.KEYLESS_PROVIDERS`. A dead server surfaces as
   `ModelUnavailable` at call time, so the chain moves on (ADR-0006).
@@ -169,9 +201,16 @@ ADR, never a shortcut.
 - **Real vault content is gitignored** (ADR-0004). All development touching
   destructive paths runs against the committed `vault/example-book/`
   fixture.
-- **Phase 5 is blocked against real vaults** until OQ-01 resolves the
-  missing backup path. It may be built and run against
-  `vault/example-book/`, which git can restore.
+- **Phase 5 is built, and still blocked against real vaults** until
+  OQ-01 resolves the missing backup path. It runs against
+  `vault/example-book/`, which git can restore. `canon_transaction` is
+  NOT the resolution of OQ-01: it recovers one interrupted apply, not a
+  session an author wants to undo tomorrow.
+- **Nothing invokes the editorial pass from a CLI.** `pass_runner` and
+  `reconciler` are tested library code with no entry point, deliberately:
+  wiring them into `write-session` is Phase 6, and doing it sooner hands
+  the engine the ability to write canon on a real vault while OQ-01 is
+  open.
 - **Reasoning/thinking stays OFF for drafting.** Measured 2026-08-31: 2x
   tokens, 2x wall time, worse prose, and the only draft that broke the
   fourth wall (pitfalls C8/C9). A local GGUF's chat template — not our

@@ -41,6 +41,14 @@ session, no chapter, and no audit record, while the run reported success.
 is appended, the report says so explicitly. Apply the whole validated delta
 or none of it.
 
+**Mechanism, since Phase 5.** `vault.canon_transaction`
+([ADR-0007](adr.md#adr-0007--canon-changes-are-transactional)) snapshots
+every canon file before the apply and restores all of them on any
+failure — because the case discipline cannot cover is the fourth append
+failing after three have already landed. On failure it keeps the
+snapshot and names it in the error, so a restore that itself failed is
+visible rather than silent.
+
 ### 🟠 A3 — Append-only tracker becomes the context hog
 
 **The trap.** A2 and A1 push you correctly toward append-only. Then nobody
@@ -80,6 +88,57 @@ loudly on non-contiguous or duplicate numbers rather than guessing.
 ---
 
 ## B. Prose quality — the risks nobody instruments
+
+### 🔴 A6 — Reading an empty violation list as a clean chapter
+
+**The trap.** The editorial pass returns `continuity_violations: []` and
+the session reports success. Nothing distinguishes that from a chapter
+the model actually checked.
+
+**Measured, not theorised (2026-09-01).** Pointed at a chapter saying
+"nine corrections on the spring-tide page" — with the locked fact that
+the page carries **two** retrieved into the same prompt, six lines above
+the chapter text — `gemini-3.5-flash-lite` returned `[]`, and the
+chapter summary it wrote (which the reconciler appends to canon)
+repeated "nine corrections". Tightening the prompt to demand a
+fact-by-fact check produced a violation on the next run: the wrong one.
+
+**Cost.** The continuity system's entire value is catching what a human
+re-reader would not. A pass that silently catches nothing is worse than
+no pass, because the session log says the chapter was reviewed.
+
+**Countermeasure.** Deterministic checks run BEFORE the call and are
+handed to the model as evidence
+([ADR-0008](adr.md#adr-0008--continuity-checking-is-not-exclusively-the-models-job),
+specs §16) — with the number finding in its prompt, the same model
+caught the same case on both subsequent runs. Never describe the
+violation list as a guarantee; it is proven for bare number
+disagreements and unproven for everything else (OQ-10).
+
+### 🔴 A7 — The editorial pass proposing the contradiction as canon
+
+**The trap.** The delta that reports a contradiction also proposes new
+locked facts. Nothing says those two fields have to agree with each
+other.
+
+**Measured (2026-09-01).** `mistral-medium-latest` flagged "nine vs two"
+as a **critical** violation and, in the same JSON object, proposed
+`The spring-tide almanac page carries nine corrections in Ovist's hand`
+as a new locked fact. A later run suggested a canon patch reading
+"Update the spring-tide almanac page correction count to nine" — the
+model proposing to edit the author's canon so its chapter would stop
+being wrong.
+
+**Cost.** The component built to detect contradictions becomes the
+fastest route for one to enter canon — with an `[author]`-origin fact
+and a `[model]`-origin fact now disagreeing in the same ledger, and
+retrieval feeding both into the next chapter's prompt.
+
+**Countermeasure.** A delta carrying any `critical` violation is refused
+whole, before anything is written (invariant 6,
+[ADR-0009](adr.md#adr-0009--a-chapter-that-contradicts-locked-canon-is-not-reconcilable)).
+Suggested canon patches are text in a session log and are never applied,
+never a write path.
 
 ### 🔴 B1 — Building the machine before testing the generator
 
@@ -291,6 +350,31 @@ locked facts. Measure before enabling it there too.
 ---
 
 ## D. Automation and workflow
+
+### 🟠 C10 — A verified model silently leaving your tier
+
+**The trap.** A model was live-verified, written into `models.yaml` with
+a dated comment, and covered by tests using fakes. Months later it is
+still in the provider's `/v1/models` listing, so a catalog probe says
+everything is fine.
+
+**Measured (2026-09-01).** `mistral-large-latest` — the editorial
+fallback settled in decision #7 and verified live in Session 4 —
+returned `403 {"message": "This model is not available in your
+subscription tier", "code": "1910"}` on the same key. It is still listed.
+**The catalog is not the entitlement.** Nothing had noticed because
+nothing had called it: a fallback lane is by definition the one that does
+not run.
+
+**Cost.** The lane that exists to survive an outage is itself dead, and
+the discovery happens during the outage.
+
+**Countermeasure.** Probe fallback lanes with a real generation call, not
+a listing, and do it whenever a phase that depends on them ships. A
+listing probe is free and proves nothing; a 20-token generation probe is
+nearly free and proves the tier. Record the dated failure in
+`models.yaml` next to the entry that replaced it (decision #8's rule),
+so the next session does not re-add it.
 
 ### 🔴 D1 — Approval that does not bind to content
 

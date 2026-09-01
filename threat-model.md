@@ -116,12 +116,33 @@ malicious actor and needs none — normal model behaviour produces it.
 - `origin: author|model` tag on every fact, so model-proposed canon is
   visibly provisional.
 - Fail closed: invalid delta ⇒ append nothing, mark `editorial-pending`.
-- Committed diffs for `example-book`; a snapshot mechanism for real vaults
-  (see T2).
+- **Transactional apply** (`vault.canon_transaction`,
+  [ADR-0007](adr.md#adr-0007--canon-changes-are-transactional)): the whole
+  delta is applied inside a snapshot, so a failure partway restores every
+  canon file rather than leaving a state matching no session.
+- **A delta carrying a `critical` continuity violation is refused whole**
+  (invariant 6,
+  [ADR-0009](adr.md#adr-0009--a-chapter-that-contradicts-locked-canon-is-not-reconcilable)).
 
-**Residual risk.** A *well-formed* but factually wrong delta still gets
-appended. Accepted — the `origin` tag and the session audit record make it
-findable and reversible by hand.
+**Residual risk, sharpened by live evidence (2026-09-01).** A
+*well-formed* but factually wrong delta still gets appended, and this is
+no longer hypothetical in two specific ways:
+
+- An editor flagged a contradiction as critical and, in the same delta,
+  proposed the contradicting statement as a new locked fact (pitfall A7).
+  That specific shape is now blocked by invariant 6 — but only because
+  the model labelled it `critical`. A model that reports the same
+  contradiction as a `warning`, or does not report it at all, still gets
+  its facts appended.
+- The `chapter_summary` is model prose appended to a canon ledger by
+  design (specs §7). In the run that missed the contradiction, the
+  summary repeated it. The summary is the one place model text reaches a
+  canon file, and it is unvalidated beyond "one paragraph, no forged
+  heading".
+
+Both remain accepted: the `origin` tag, the append-only ledger, and the
+session audit make them findable and reversible by hand. Neither is
+silent in the way a rewritten file body would be.
 
 ### T2 — Manuscript loss with no recovery path 🟠 Medium × High
 
@@ -193,6 +214,21 @@ future input.
   `.github/workflows/x.yml` achieves nothing.
 - Vault paths resolve under the book root; a resolved path escaping that
   root aborts the run.
+- `target_file` is additionally **validated as book-relative by the
+  schema** — no leading `/` or `~`, no drive letter, no `..` segment.
+  Defence in depth: the field is never a write path, and it also cannot
+  hold a path that looks like an escape.
+- Canon-line text (facts, thread text, deepen questions) is rejected if
+  it contains `<!--` or `-->`. A "fact" carrying `<!-- FACTS:END -->`
+  would otherwise close the marker block it was appended inside — the
+  vault-file equivalent of an injection, achieved with no malice at all.
+
+**Observed, 2026-09-01.** A delta suggested a canon patch reading
+"Update the spring-tide almanac page correction count to nine" — the
+model proposing an edit to author-owned canon so that its own chapter
+would stop contradicting it. It reached a log file and nothing else,
+which is exactly the designed outcome, but it is a concrete instance of
+model output arguing for a change to the trusted corpus.
 
 ### T5 — Publishing unreviewed content 🟠 Medium × Medium *(Phase 8)*
 
