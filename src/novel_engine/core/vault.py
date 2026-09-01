@@ -16,6 +16,9 @@ from __future__ import annotations
 import hashlib
 import re
 import shutil
+import tempfile
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -588,3 +591,52 @@ def append_summary(book_root: Path, chapter_number: int, paragraph: str) -> None
             f"{path}: the appended summary does not read back as one new "
             "entry. Restore the file from git before re-running."
         )
+
+
+# --- all-or-nothing application ---------------------------------------------
+
+
+@contextmanager
+def canon_transaction(paths: Sequence[Path]) -> Iterator[Path]:
+    """Snapshot `paths`; restore every one of them if the block raises.
+
+    Invariant 2 in the one place it is hard: applying a delta means
+    several appends across several files, and a failure at the third one
+    would otherwise leave canon in a state matching no session and no
+    chapter (pitfall A2). The append primitives verify each write, so
+    this exists for what they cannot catch — a later step failing after
+    an earlier one already landed.
+
+    The only bytes this can ever write are bytes it read from the same
+    file moments earlier: there is no path here for model text to reach
+    a canon body. On failure the snapshot directory is KEPT and named in
+    the raised error, so a restore that itself failed is diagnosable.
+
+    Not a substitute for OQ-01: this recovers one interrupted apply, not
+    a session an author wants to undo tomorrow.
+    """
+    scratch = Path(tempfile.mkdtemp(prefix="novel-engine-canon-"))
+    saved: dict[Path, Path] = {}
+    for path in paths:
+        if not path.is_file():
+            raise VaultError(f"Cannot snapshot {path}: it does not exist.")
+        copy = scratch / f"{len(saved):02d}-{path.name}"
+        shutil.copy2(path, copy)
+        saved[path] = copy
+
+    try:
+        yield scratch
+    except BaseException as exc:
+        failures: list[str] = []
+        for path, copy in saved.items():
+            try:
+                shutil.copy2(copy, path)
+            except OSError as restore_error:  # pragma: no cover - disk failure
+                failures.append(f"{path}: {restore_error}")
+        detail = (
+            f" RESTORE FAILED for {'; '.join(failures)}." if failures else " Restored."
+        )
+        raise VaultError(
+            f"Canon change aborted: {exc}.{detail} Pre-change copies are in {scratch}."
+        ) from exc
+    shutil.rmtree(scratch, ignore_errors=True)
