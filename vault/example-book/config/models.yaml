@@ -34,14 +34,18 @@ fallback_chain: # applies when a pov_model's provider fails or is rate-limited
 # stability condition (open-questions.md OQ-04 re-run; decisions.md #12).
 
 editor_model:
-  # REORDERED 2026-09-01 (decisions.md #28) on the first real continuity case.
-  # Pointed at the original ch-005 ("nine corrections" against ch-001's locked
-  # "two"), flash-lite returned an empty violation list TWICE and once wrote the
-  # contradiction into the summary; mistral-medium quoted the contradicting
-  # sentence and named the fact, first call, zero repairs. Editorial is a
-  # judgement task, so the model that judges leads.
-  primary: { provider: mistral, model: mistral-medium-latest } # valid JSON w/ json_object; ~1100 output tokens/delta
-  fallback: { provider: gemini, model: gemini-3.5-flash-lite } # valid JSON w/ responseMimeType; misses contradictions (OQ-10)
+  # ROUTING HISTORY, both same day, both on the ch-005 case:
+  #   #28 put mistral-medium first because flash-lite missed the "nine vs two"
+  #       contradiction twice.
+  #   #31 put flash-lite back, because the deterministic number check (#30) now
+  #       hands the disagreement to whichever model answers, and flash-lite
+  #       caught it on both runs with the finding in its prompt — at 476 output
+  #       tokens against mistral's 1091, and proposing 1 new locked fact against
+  #       mistral's 8-9 (set dressing included).
+  # Mistral stays second: it is the only model that has caught a contradiction
+  # UNAIDED, which is exactly what a fallback should be good at.
+  primary: { provider: gemini, model: gemini-3.5-flash-lite } # valid JSON w/ responseMimeType
+  fallback: { provider: mistral, model: mistral-medium-latest } # valid JSON w/ json_object
 # mistral-large-latest REMOVED 2026-09-01: 403 'This model is not available in
 # your subscription tier' (code 1910) on the key that verified it in Session 4.
 # It is still LISTED by /v1/models — the catalog is not the entitlement.

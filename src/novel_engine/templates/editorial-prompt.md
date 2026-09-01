@@ -68,9 +68,15 @@ Rules that matter more than completeness:
   contradicting chapter text and name the fact. Do not report things you
   would merely have written differently. If nothing contradicts any
   fact, return an empty list.
-- **New locked facts are concrete, checkable, and established by THIS
-  chapter**: one atomic sentence each, no interpretation, no theme, no
-  foreshadowing. `source_chapter` is {{chapter_number}}.
+- **New locked facts are things a LATER CHAPTER COULD CONTRADICT** — a
+  count, a date, a name, a relationship, a capability, a physical state.
+  One atomic checkable sentence each, established by THIS chapter, no
+  interpretation, no theme, no foreshadowing. Atmosphere is not canon:
+  the colour of a binding, the sound of a clock, the tape used to tie a
+  roll are set dressing, and putting them in the ledger crowds out the
+  facts that matter. Prefer three load-bearing facts to nine. Do not
+  restate a locked fact that is already listed above.
+  `source_chapter` is {{chapter_number}}.
 - `entity` is set **only** for `category: "character"`, and is the
   character's id in lowercase-hyphen form (for example `ovist-rhoam`).
   Every other category takes `entity: ""`.

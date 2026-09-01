@@ -386,57 +386,63 @@ example-book fixture gains a block so Batches 2–3 are testable.
 
 ---
 
-## 🔴 OQ-10 — Can the editor model actually catch a continuity contradiction?
+## 🟠 OQ-10 — Can the editor model catch a continuity contradiction?
 
-**Blocks:** nothing structurally. Blocks *trusting* the editorial pass.
-Raised 2026-09-01 at the end of Phase 5, from live evidence.
+**Numeric contradictions: ANSWERED 2026-09-01** (decisions #29, #30,
+#31). **Non-numeric contradictions: still open, still untested.**
+Downgraded from 🔴 to 🟠: it no longer blocks trusting the pass on the
+class we have evidence for, but it does block claiming the pass catches
+contradictions in general.
 
-**The situation.** Phase 5's machinery works end to end against the real
-editor route: the delta validated on the first call with zero repairs,
-and the reconciler applied it all-or-nothing. What it did NOT do is the
-thing the pass exists for.
-
-The test case was the original ch-005 (`git show
-d518b74:vault/example-book/chapters/chapter-005.md`), which says "nine
+**The case.** The original ch-005 (`git show
+d518b74:vault/example-book/chapters/chapter-005.md`) says "nine
 corrections on the spring-tide page" against ch-001's locked fact that
-the page carries **two**. That fact was retrieved into the prompt and
-sat six lines above the chapter text. Two live runs on
-`gemini:gemini-3.5-flash-lite`:
+the page carries **two**. That fact was retrieved into the prompt, six
+lines above the chapter text.
 
-| Run | Prompt | `continuity_violations` | Verdict |
+**What five live runs showed**
+
+| Run | Editor | Prompt | Result |
 |---|---|---|---|
-| 1 | "an invented violation is worse than a missed one" | `[]` | missed it, and the summary it wrote **repeated** "nine corrections" |
-| 2 | "check the chapter against every locked fact, one at a time; numbers are the commonest case" | one violation | still missed the nine-vs-two; reported "twelve years of rolls" against "kept the ledger for eleven years", which is arguably not a contradiction at all |
+| 1 | gemini flash-lite | original | `[]` — missed it, and the summary it wrote repeated "nine corrections", putting the contradiction INTO canon |
+| 2 | gemini flash-lite | "check every locked fact, one at a time" | one violation, the WRONG one ("twelve years of rolls" against "eleven years keeping the ledger") — planted one still missed |
+| 3 | mistral-large-latest | — | **403 `tier_not_allowed`.** The Session 4 fallback is dead; `/v1/models` still lists it |
+| 4 | mistral-medium-latest | same as run 2 | **caught it unaided** — quoted the sentence, named the fact, first call, zero repairs. Also proposed "The page carries nine corrections" as a NEW LOCKED FACT (→ decision #29) and 8-9 facts including set dressing (→ decision #32) |
+| 5 | gemini flash-lite | run 2 + the #30 number check finding | **caught it, both runs**, and decision #29's refusal fired end to end: nothing appended |
 
-So: one miss, one miss plus a false positive. The tightened prompt did
-change behaviour — it made the model perform a check — but not accuracy.
+**What that settles.** Prompt wording alone did not fix it. A better
+model did (run 4). A deterministic pre-filter fixed it on the weaker
+model too, more cheaply (run 5), which is why routing went back to
+flash-lite in #31 — the judgement is now partly in Python, where it
+does not depend on a free tier staying alive.
 
-**Why this matters more than a normal bug.** A pass that returns `[]` is
-indistinguishable from a clean chapter. The continuity system's whole
-value is catching what a human re-reader would not, and on its first
-real case it caught nothing while reporting success — the silent-failure
-shape of pitfall A1, arriving through a different door. Note also that
-`chapter_summary` is model prose appended to a canon ledger: run 1 wrote
-the contradiction INTO canon.
+**What is still open.** Every catch so far is a bare number
+disagreement, which is exactly the class `quality/continuity_numbers.py`
+finds and hands over. Nothing has tested whether either model catches a
+contradiction the regex cannot see:
 
-**Scope of the question.** Only: what makes the continuity check
-reliable enough to trust. Not the delta schema, not the reconciler, not
-the fail-closed policy — those are settled and verified.
+- a **name** ("Ferain Hoss" where canon says the predecessor was someone
+  else)
+- a **date or ordering** ("the seal predates the flood" against a locked
+  timeline fact)
+- a **rewritten quantity** ("a handful of corrections", "half a dozen")
+- a **capability** (a character doing what a locked fact says they
+  cannot)
 
-**Options**
+Run 4 is the only evidence that a model finds a contradiction the
+pre-filter is not already pointing at, and it is one run on one case.
 
-| Option | How it works | Cost |
-|---|---|---|
-| **Try the fallback editor first (recommended first step)** | Re-run the same case on `mistral-large-latest`, then on the local lane. | One or two calls. Tells us whether this is model-specific or prompt-specific before any redesign. |
-| Ask fact-by-fact | The pass sends the chapter once per locked fact, or asks for an explicit per-fact verdict list. | N× the calls, or a schema change. Directly attacks "the model skimmed". |
-| Deterministic pre-filter | Extract numbers/names from locked facts in Python and flag chapters that state a different number for the same noun; hand the candidates to the model. | Real code, narrow scope, no quota. Catches exactly the number-disagreement class, which is the commonest and was the one missed twice. |
-| Accept and rely on the author | Treat the pass as a summariser and fact-proposer, and stop claiming it catches contradictions. | Honest, free, and gives up the feature the project was built around. |
+**Scope of the remaining question.** Only: does the pass catch
+contradictions outside the numeric class, and if not, what is the
+cheapest thing that does?
 
-**Recommendation:** try the fallback model first, because it is two calls
-and it decides whether the next step is prompt work or engineering. Then
-the deterministic pre-filter — the missed case is a bare number
-disagreement, which is the one class Python can find without judgement.
+**Recommendation.** Plant one non-numeric contradiction in a scratch
+copy of a fixture chapter — a name is cheapest to author and the hardest
+for a regex — and run both editors on it. Two calls, one session, and it
+decides whether the answer is "the model is fine, the prompt was the
+problem" or "extend the deterministic layer to entity names next".
 
 **Until resolved:** do not describe the editorial pass as a continuity
-guarantee anywhere. It proposes facts, writes summaries, and surfaces
-questions reliably; the violation list is unproven.
+guarantee. It reliably proposes facts, writes summaries, surfaces
+questions, and — since #30 — catches number disagreements. Everything
+else is unproven.
