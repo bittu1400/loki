@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from novel_engine.core.config import BookConfig
+from novel_engine.core.errors import EditorialError
 from novel_engine.core.vault import (
     append_deepen_question,
     append_fact,
@@ -88,6 +89,42 @@ def patches_markdown(delta: EditorialDelta, session_id: str) -> str:
     return "\n".join(lines)
 
 
+def _refuse_critical_violations(delta: EditorialDelta) -> None:
+    """A chapter that contradicts locked canon is not reconcilable.
+
+    Decision #29, found live: the editor flagged "nine corrections"
+    against a locked "two" as critical and, in the same delta, proposed
+    `The page carries nine corrections` as a new locked fact. Without
+    this refusal, the pass that detects a contradiction is also the
+    fastest route for that contradiction to become canon.
+
+    The fix is an author action either way — correct the prose, or
+    demote the fact the prose disagrees with — after which the pass
+    re-runs cleanly. So there is no override flag here: a caller that
+    could skip this check would only ever use it to write the thing the
+    check exists to stop.
+    """
+    critical = [
+        violation
+        for violation in delta.continuity_violations
+        if violation.severity == "critical"
+    ]
+    if not critical:
+        return
+    detail = "\n".join(
+        f"  - {violation.violated_fact}\n    chapter says: "
+        f"{violation.chapter_excerpt}\n    {violation.explanation}"
+        for violation in critical
+    )
+    raise EditorialError(
+        f"Chapter {delta.chapter_number:03d} contradicts locked canon in "
+        f"{len(critical)} place(s); refusing to reconcile ANY of this "
+        f"delta (decision #29).\n{detail}\n"
+        "Fix the chapter, or demote the fact it disagrees with, then run "
+        "the editorial pass again. Nothing was appended."
+    )
+
+
 def reconcile(
     book: BookConfig,
     delta: EditorialDelta,
@@ -99,7 +136,11 @@ def reconcile(
     Raises VaultError if any step is refused — with canon restored to
     its pre-application bytes and the snapshot location named. Callers
     treat that as `editorial-pending`: nothing was appended.
+
+    Raises EditorialError before touching anything if the delta reports
+    a CRITICAL continuity violation (decision #29).
     """
+    _refuse_critical_violations(delta)
     root = book.root
     result = Reconciliation(chapter_number=delta.chapter_number)
 

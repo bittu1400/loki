@@ -11,7 +11,7 @@ import pytest
 
 from novel_engine.core.config import load_book_config
 from novel_engine.core.context_builder import parse_facts, recent_summaries
-from novel_engine.core.errors import VaultError
+from novel_engine.core.errors import EditorialError, VaultError
 from novel_engine.core.vault import canon_transaction
 from novel_engine.editorial.reconciler import CANON_FILES, Reconciliation, reconcile
 from novel_engine.editorial.schema import EditorialDelta
@@ -280,3 +280,53 @@ def test_canon_transaction_refuses_a_missing_file(tmp_path: Path) -> None:
         canon_transaction([tmp_path / "absent.md"]),
     ):
         pass
+
+
+# --- a contradicting chapter is not reconcilable (decision #29) --------------
+
+
+VIOLATION = {
+    "severity": "critical",
+    "violated_fact": "The spring-tide page carries two corrections.",
+    "chapter_excerpt": "There were nine corrections on the spring-tide page",
+    "explanation": "Chapter states nine; the locked fact says two.",
+}
+
+
+def test_a_critical_violation_refuses_the_whole_delta(book) -> None:
+    """The live failure this rule exists for: the editor flagged the
+    contradiction AND proposed it as a new locked fact in one delta."""
+    before = canon_bytes(book)
+    poisoned = delta(
+        continuity_violations=[VIOLATION],
+        new_locked_facts=[
+            {
+                "category": "object",
+                "entity": "",
+                "fact": "The spring-tide page carries nine corrections.",
+                "source_chapter": 6,
+            }
+        ],
+    )
+    with pytest.raises(EditorialError, match="contradicts locked canon"):
+        reconcile(book, poisoned, session_id=SESSION)
+
+    assert canon_bytes(book) == before
+    assert not (book.root / "log" / "sessions" / f"{SESSION}-patches.md").exists()
+
+
+def test_the_refusal_names_the_fact_and_the_chapter_text(book) -> None:
+    with pytest.raises(EditorialError) as exc:
+        reconcile(book, delta(continuity_violations=[VIOLATION]), session_id=SESSION)
+
+    message = str(exc.value)
+    assert VIOLATION["violated_fact"] in message
+    assert VIOLATION["chapter_excerpt"] in message
+    assert "Nothing was appended" in message
+
+
+def test_warnings_are_advisory_and_still_reconcile(book) -> None:
+    warned = delta(continuity_violations=[{**VIOLATION, "severity": "warning"}])
+    result = reconcile(book, warned, session_id=SESSION)
+    assert result.summary_added is True
+    assert len(result.facts_added) == 2
