@@ -313,6 +313,8 @@ src/novel_engine/
   quality/
     metrics.py           # specs §14 metrics as pure functions; no IO, no verdicts
     style_checks.py      # THRESHOLDS parsing, judge(), build_report()
+    continuity_numbers.py # number-disagreement finder (decision #30); evidence
+                         #   for the editorial prompt, never a gate
   editorial/
     schema.py            # delta models; extra="forbid"; canon-line text guards
     pass_runner.py       # prompt/call/validate/repair; fail-closed, writes nothing

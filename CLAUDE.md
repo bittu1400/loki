@@ -135,12 +135,25 @@ ADR, never a shortcut.
   `novel_engine/templates/editorial-prompt.md`, not per-book config. A
   test parses the example object it shows the model through
   `parse_delta`, so schema and prompt cannot drift apart silently.
-- **The editorial pass's continuity judgement is UNPROVEN** (OQ-10).
-  Live on the one real case it exists for, it returned an empty
-  violation list and wrote the contradiction into the summary; a
-  tightened prompt then produced a different, wrong violation. The
-  machinery is verified; the verdicts are not. Do not describe the pass
-  as a continuity guarantee.
+- **A chapter that contradicts locked canon is not reconcilable**
+  (decision #29). `reconcile()` refuses a delta carrying any `critical`
+  violation, before the transaction opens. This exists because a live
+  editor flagged "nine corrections" against a locked "two" AND proposed
+  "the page carries nine corrections" as a new locked fact in the same
+  delta. There is no override flag, deliberately.
+- **The number check runs before the editorial call** (decision #30,
+  `quality/continuity_numbers.py`). Quantities in the chapter against
+  quantities in the retrieved facts; findings go into the prompt as
+  evidence. It is what made the primary editor catch the case it had
+  missed twice unaided. Its false-positive guards are TUNED to measured
+  failures — two shared words beyond the counted noun, and a sentence
+  that also states the canonical number is consistent. Do not loosen
+  them without re-running the fixture check that asserts zero findings
+  on every committed chapter.
+- **The editorial pass catches number disagreements and nothing proven
+  beyond that** (OQ-10). Names, dates, rewritten quantities and
+  capabilities have never been tested. Do not describe the pass as a
+  continuity guarantee.
 - **`quality/` holds no numbers.** `metrics.py` measures and never judges;
   thresholds live in each book's `canon/style-guide.md` between
   `THRESHOLDS` markers. A book with no block gets metrics and no verdicts

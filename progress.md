@@ -21,17 +21,16 @@ The full path now exists: `write-session` drafts and writes a chapter;
 `check-style` measures it for free; `editorial.pass_runner` reviews it
 and returns a schema-validated delta or a refusal; `editorial.reconciler`
 applies that delta to canon all-or-nothing through the vault primitives.
-**262 tests pass, ruff clean.**
+**277 tests pass, ruff clean.**
 
-**The one thing to carry forward:** the machinery is verified and the
-judgement is not. Pointed live at the original ch-005 — "nine
-corrections" against ch-001's locked "two", with that fact in the prompt
-— the editor model returned an empty violation list and wrote the
-contradiction into the summary it appended to canon. A tightened prompt
-made it perform the check and report a *different*, wrong violation.
-Recorded as **OQ-10**, which is the most important open item in the
-project right now: a pass that returns `[]` is indistinguishable from a
-clean chapter.
+**OQ-10 was chased down in the same session and is half-answered.** The
+pass initially missed the one contradiction it was built to catch. Five
+live runs later: a deterministic number check now runs before the call
+(#30), a delta carrying a critical violation cannot be reconciled at all
+(#29), and the primary editor catches the case it missed twice. What is
+still unproven is every contradiction a regex cannot see — names, dates,
+rewritten quantities, capabilities. OQ-10 is downgraded to 🟠 and
+narrowed to exactly that.
 
 Nothing is wired into a CLI yet — Phase 6 wires the pass and the
 reconciler into a session and persists the phase pointer.
@@ -151,13 +150,68 @@ the new facts were concrete and correct, the deepen question was real,
 `beat_adherence` was accurate. It is specifically the violation list
 that is unproven, and that is the feature the project was built around.
 
+### Continued the same session — OQ-10 chased down
+
+The author asked for the mistral run and for OQ-10 to continue. Five
+live runs total on the ch-005 case; the full table is in
+open-questions.md OQ-10.
+
+**`mistral-large-latest` is dead** — 403 `tier_not_allowed` (code 1910)
+on the key that verified it in Session 4, while `/v1/models` still lists
+it. The editorial fallback from decision #7 had been gone for some time
+and nothing had noticed, because nothing had called it. Confirmed live
+in passing: a PermanentFailure did NOT walk to the second route
+(invariant 3, working).
+
+**`mistral-medium-latest` caught the contradiction unaided** — quoted
+"There were nine corrections on the spring-tide page", named the locked
+fact, first call, zero repairs. It also did two things that became
+decisions:
+
+- proposed `The spring-tide page carries nine corrections` as a NEW
+  LOCKED FACT in the same delta that flagged it → **decision #29**:
+  a delta with a critical violation is not reconcilable at all.
+- proposed 8-9 facts including set dressing ("the Almanac Office uses
+  green tape to tie countersigning rolls") → **decision #32**: the
+  prompt now says a locked fact is something a later chapter could
+  contradict.
+
+**The deterministic number check (#30) closed the gap on the weak
+model.** `quality/continuity_numbers.py` compares quantities in the
+chapter against quantities in the retrieved facts and hands the findings
+to the prompt as evidence. On the fixture it reports exactly one finding
+on the pre-fix ch-005 and zero on every committed chapter, including the
+hand-corrected one — both halves asserted by tests. With that finding in
+its prompt, `gemini-3.5-flash-lite` caught the contradiction on **both**
+runs, having missed it twice without.
+
+Its two false-positive guards are tuned to measured failures, not
+imagined ones: one shared word between fact and sentence let all three
+"years" conflicts through — including the exact false positive the live
+model reported — so it requires two; and a sentence that also states the
+canonical number ("eleven years of his tenure, then one year of his
+predecessor") is treated as consistent.
+
+**Routing went back to gemini (#31, superseding #28 the same day).**
+Once the pre-filter existed, #28's premise stopped being true.
+flash-lite costs 476 output tokens against mistral-medium's 1091 and
+proposed 1 fact against 8-9. Mistral-medium stays as fallback because it
+is the only model that has caught a contradiction unaided.
+
+Also seen and worth remembering: in run 5 the delta suggested a canon
+patch reading "Update the spring-tide almanac page correction count to
+nine" — the model proposing to edit the author's canon to match its
+chapter. It went nowhere, because suggestions are text in a log and
+`reconcile` had already refused the delta.
+
 ### Not done / not attempted
 
 - No CLI for the editorial pass. Nothing calls `pass_runner` or
   `reconciler` in a session — that is Phase 6 wiring
-- The fallback editor (`mistral-large-latest`) was never exercised live;
-  only the fakes cover it. OQ-10's recommended first step is to run the
-  same case on it
+- Non-numeric contradictions have never been tested — no name, date,
+  rewritten quantity, or capability case exists. That is all of OQ-10
+  that is left, and it is the part the deterministic layer cannot help
+  with
 - Reasoning-on for the editorial pass was NOT measured (still the open
   experiment from Session 7)
 - `next_step_note` is validated and returned but written nowhere —
@@ -522,26 +576,21 @@ downstream treats stubs as absent. Implementation is Phase 3 Batch 3 work.
 
 ## Next session — start here
 
-**Two things compete for this session. Ask the author which one first.**
+**Goal: Phase 6 — session state machine + resume.** OQ-10's numeric half
+is closed; what remains of it is one cheap experiment that can be done
+inside Phase 6 rather than instead of it.
 
-**Option A — OQ-10 (recommended).** The editorial pass's continuity
-judgement is unproven and it is the feature the project exists for.
-OQ-10's first step is two live calls: run the same ch-005 case on the
-fallback editor (`mistral:mistral-large-latest`), and if it also misses,
-prototype the deterministic pre-filter (Python finds number
-disagreements between a locked fact and the chapter, and hands the
-candidates to the model). That is engineering, not prompt roulette, and
-it attacks exactly the class that was missed twice.
+**Phase 6** (`core/state_machine.py`, `log/next-step.md` persistence,
+and wiring `pass_runner` + `reconciler` into `write-session`). Nothing
+started. specs §11 has the state diagram; §8 has the `next-step.md`
+contract. Batches are proposed below.
 
-**Option B — Phase 6: session state machine + resume**
-(`core/state_machine.py`, `log/next-step.md` persistence, and wiring
-`pass_runner` + `reconciler` into `write-session`). Nothing started.
-specs §11 has the state diagram; §8 has the `next-step.md` contract.
-
-Phase 6 is the phase the tracker says is next. OQ-10 is the phase the
-evidence says is next. They are not in conflict — Phase 6 wires up a
-pass whose verdicts we do not yet trust, which is fine as long as the
-CLI reports the violation list as advisory.
+**The OQ-10 experiment, when there is a spare two calls:** plant ONE
+non-numeric contradiction in a scratch copy of a fixture chapter — a
+name is cheapest to author and the hardest for a regex — and run both
+editors on it. That decides whether the answer is "the prompt was the
+problem" or "extend the deterministic layer to entity names next".
+Nothing depends on it, but it is the only untested class left.
 
 ### Reproduce the OQ-10 case in one command
 
@@ -554,7 +603,16 @@ session was ephemeral (scratchpad); rebuilding it is ~40 lines:
 copytree the fixture to a temp dir, `load_book_config`, take the
 manifest entry for chapter 5, `run_editorial_pass(book, entry, body,
 build_providers(os.environ))`. It prints the delta; `reconcile` applies
-it. Nothing touches the committed fixture.
+it — or refuses, since that chapter now trips decision #29. Nothing
+touches the committed fixture.
+
+The free half of the same case needs no key at all:
+
+```python
+find_number_conflicts(parse_facts(tracker_text), chapter_body)
+```
+
+one finding on the pre-fix ch-005, zero on every committed chapter.
 
 ### Blocked / waiting on the author
 
@@ -562,7 +620,8 @@ it. Nothing touches the committed fixture.
    still never run against a real vault. `canon_transaction` is NOT the
    answer to OQ-01 — it recovers one interrupted apply, not a session an
    author wants to undo tomorrow. No real book exists yet.
-2. **OQ-10 needs a direction** — see the two options above.
+2. **OQ-10's remaining half** — the non-numeric experiment above. Not
+   blocking; two calls whenever convenient.
 3. Non-blocking: author may still supply a real Requesty key
    (`rqy_...`) → spike its 12 free models before any routing change.
 4. Non-blocking, still open from Session 7: reasoning-on for the
@@ -575,11 +634,14 @@ it. Nothing touches the committed fixture.
 
 1. This file, CLAUDE.md (invariants 1–3, the vault primitive list, and
    the two new structural facts about the editorial pass)
-2. decisions.md #13–27 — do not relitigate. #15/#16 are the shape every
+2. decisions.md #13–32 — do not relitigate. #15/#16 are the shape every
    write primitive copies; #22 is the no-defaults thresholds rule;
    #25 is why ch-005's hash is deliberately stale; #26 is why the
    editorial prompt is packaged rather than per-book; #27 is thread ID
-   allocation and its one honest gap
+   allocation and its one honest gap; **#28 was superseded by #31 the
+   same day** — read both, the pair is the clearest record in the file
+   of a decision surviving exactly as long as its evidence; #29/#30/#32
+   are the three rules that came out of the live editorial runs
 3. [open-questions.md](open-questions.md) **OQ-10 first**, then OQ-01
 4. [specs.md](specs.md) §11 (state machine) and §8 (`next-step.md`
    contract) for Phase 6; §12's status note for what Phase 5 actually
@@ -607,14 +669,19 @@ src/novel_engine/
   drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs
   drafting/provenance.py# make_session_id, chapter_frontmatter, utc_timestamp
   providers/*           # unchanged this session
-  quality/*             # unchanged this session
+  quality/metrics.py, style_checks.py   # unchanged this session
+  quality/continuity_numbers.py  # find_number_conflicts(facts, body),
+                        #   render_conflicts(). Decision #30. Tuned
+                        #   false-positive guards — see its docstring
+                        #   before touching them
   editorial/schema.py   # EditorialDelta + parse_delta(). extra="forbid";
                         #   canon-line text guards; no origin field (A4)
   editorial/pass_runner.py # build_editorial_prompt, run_editorial_pass,
                         #   repair loop, EDITORIAL_PARAMS (temp 0.2).
                         #   Returns data; writes nothing, ever
   editorial/reconciler.py  # reconcile(book, delta, session_id) -> Reconciliation.
-                        #   The only caller of the canon appends
+                        #   The only caller of the canon appends. Refuses
+                        #   any delta with a critical violation (#29)
   cli/{new_book,write_session,check_style}.py  # unchanged; NONE of them
                         #   calls the editorial pass yet (Phase 6)
 src/novel_engine/templates/book/            # packaged scaffolder source
@@ -622,9 +689,9 @@ src/novel_engine/templates/editorial-prompt.md  # engine-owned (decision #26)
 vault/example-book/     # fixture, unchanged this session — the live run used
                         #   a temp copy, so the committed fixture still has
                         #   chapters 001-005 with summaries for 001-002 only
-tests/                  # 19 files, 262 tests. New: test_editorial_schema.py,
+tests/                  # 20 files, 277 tests. New: test_editorial_schema.py,
                         #   test_vault_appends.py, test_editorial_pass.py,
-                        #   test_reconciler.py
+                        #   test_reconciler.py, test_continuity_numbers.py
 ```
 
 Entry points (`pyproject.toml`) are unchanged: `new-book`,
@@ -660,7 +727,12 @@ reported as ADVISORY until OQ-10 says otherwise, and an
 
 - Do not run the editorial pass against any real book (OQ-01)
 - Do not present the violation list as a guarantee anywhere in the CLI
-  or the docs (OQ-10)
+  or the docs (OQ-10). Number disagreements are covered; nothing else is
+- Do not loosen `continuity_numbers`' false-positive guards without
+  re-running the test that asserts zero findings on every committed
+  chapter — both guards are tuned to failures that actually happened
+- Do not add an override that lets a critical-violation delta reconcile
+  (decision #29)
 - Do not let a model regenerate any canon file body (invariant 1)
 - Do not add a general "write canon file" vault primitive
 - Do not "fix" OQ-10 by loosening the schema or letting the model write

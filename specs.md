@@ -500,6 +500,17 @@ there is no `origin` field — every fact arriving through the schema came
 from a model and is tagged `[model]` unconditionally (§4, pitfall A4).
 There is no CLI for the pass yet; wiring it into a session is Phase 6.
 
+Two rules were added on live evidence the same day:
+
+- The prompt carries a **deterministic number check**
+  (`quality/continuity_numbers.py`, decision #30) beside the §14 style
+  metrics — quantities in the chapter compared against quantities in the
+  retrieved locked facts. Evidence for the model, never a gate. It is
+  what made the primary editor catch the case it had missed twice.
+- A delta reporting a **`critical` continuity violation is not
+  reconcilable** (decision #29). Found live: the editor flagged the
+  contradiction and proposed it as a new locked fact in the same delta.
+
 ---
 
 ## 13. Session audit record — `log/sessions/<session-id>.json`
