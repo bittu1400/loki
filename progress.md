@@ -221,6 +221,17 @@ started** and are now fixed:
   editorial fallback, and OQ-08 still reasoned about `gemini-2.5-pro`'s
   quota — a model that has been unobtainable since Session 4.
 
+One **live bug** was found by the audit, not by a test:
+`src/novel_engine/templates/book/config/models.yaml` — the scaffolder's
+own template — still routed the editorial pass to
+`openrouter:z-ai/glm-5.2:free` (dismissed as upstream-saturated) with
+`gemini:gemini-2.5-flash` as fallback (a family closed to new keys since
+Session 4). **Every book scaffolded since then would have failed its
+first editorial call**, and nothing caught it because the fixture has its
+own models.yaml and the tests use fakes. Now points at the verified pair
+with dated per-entry comments; `tests/test_new_book.py` gained the
+mistral key its scaffolded book now legitimately demands at startup.
+
 New this session:
 
 - **[ADR-0007](adr.md#adr-0007--canon-changes-are-transactional)** —
@@ -263,6 +274,13 @@ New this session:
 
 - No CLI for the editorial pass. Nothing calls `pass_runner` or
   `reconciler` in a session — that is Phase 6 wiring
+- Two cosmetic frontmatter gaps found during the doc audit, recorded and
+  NOT fixed (both are Phase 6's business, and neither is read by any
+  code): the engine writes no `title` key — a generated chapter's title
+  lives only in its `# Chapter N — …` heading — and it writes
+  `status: draft` where architecture §4 step 11 says a completed session
+  should end at `pending-review`. specs §3 now documents both as the
+  actual shape rather than the intended one
 - Non-numeric contradictions have never been tested — no name, date,
   rewritten quantity, or capability case exists. That is all of OQ-10
   that is left, and it is the part the deterministic layer cannot help

@@ -4,10 +4,14 @@
 # it (OQ-02). Free-tier availability changes without notice; add a dated
 # comment per entry recording when each was last verified.
 #
-# Snapshot 2026-08-25:
-# - gemini free tier: flash-class generous; pro ~0-50 RPD, verify first
+# Snapshot 2026-09-01:
+# - gemini: the entire 2.5 family is CLOSED to new keys; gemini-3.5-flash-lite
+#   works and is fast
 # - openrouter :free: 20 RPM / 50 RPD (1000 RPD after one-time $10 credits)
 # - groq: llama-3.3-70b-versatile is GONE; use openai/gpt-oss-120b
+# - mistral: mistral-large-latest returns 403 tier_not_allowed on a free key
+#   WHILE STILL APPEARING in /v1/models. A catalog listing is not an
+#   entitlement — probe a lane with a real generation call (pitfall C10).
 
 pov_models: {}
 #  <character-id>:
@@ -19,9 +23,13 @@ fallback_chain: []
 #  - { provider: groq, model: openai/gpt-oss-120b }
 #  - { provider: openrouter, model: nvidia/nemotron-3-ultra-550b-a55b:free }
 
+# The editorial role is the one place judgement matters more than latency.
+# Both entries below were live-verified on 2026-09-01 against a real
+# continuity contradiction; see decisions.md #28/#31 for why this order and
+# not the reverse. Re-verify before trusting either.
 editor_model:
-  primary: { provider: openrouter, model: z-ai/glm-5.2:free } # supports structured_outputs; verify free quota
-  fallback: { provider: gemini, model: gemini-2.5-flash }
+  primary: { provider: gemini, model: gemini-3.5-flash-lite } # verified: 2026-09-01
+  fallback: { provider: mistral, model: mistral-medium-latest } # verified: 2026-09-01
 
 generation_params:
   temperature: 0.9

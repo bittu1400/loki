@@ -152,6 +152,23 @@ The copper conduits hummed against Kaelen's teeth…
   the author-edit feedback loop ([architecture.md](architecture.md) §7).
   A hash that silently invalidates on every edit would be useless; this
   one carries information *because* it goes stale.
+- **What the engine actually writes (verified 2026-09-01).** Exactly
+  these keys, in this order: `chapter_number`, `book_slug`, `pov`, `arc`,
+  `status`, `session_id`, `created_at`, `target_words`, `actual_words`,
+  `assigned_model`, `actual_model`, `fallback_triggered`,
+  `continuation_rounds`, `input_tokens`, `output_tokens`, and
+  `generated_hash` (added by the writing primitive, never by the caller).
+  Two differences from the sample above, both real:
+  - **`title` is author-supplied and the engine never writes it.** A
+    generated chapter carries its title only in the body's
+    `# Chapter N — Title` heading. The hand-written fixture chapters
+    (001, 002) have a `title` key because a human put it there. Lifting
+    it out of the heading into frontmatter is Phase 6 work at the
+    earliest, and is cosmetic — nothing reads it.
+  - **The engine writes `status: draft`.** `pending-review` is the value
+    a completed session is supposed to set at the end (architecture §4
+    step 11), and nothing sets it yet — that arrives with the Phase 6
+    state machine.
 - `status` values and legal transitions are defined in §11.
 - Frontmatter is flat and scalar-only for Notion compatibility (§1).
 - Failed sessions (ADR-0005) use status `failed-stub`, `actual_words: 0`,

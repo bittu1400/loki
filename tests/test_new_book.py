@@ -12,6 +12,11 @@ FAKE_ENV = {
     "GEMINI_API_KEY": "test-gemini",
     "OPENROUTER_API_KEY": "test-openrouter",
     "GROQ_API_KEY": "test-groq",
+    # The scaffolder's editor_model fallback routes mistral (verified
+    # 2026-09-01). A scaffolded book that names a provider must demand
+    # that provider's key at startup — that demand IS the behaviour
+    # under test here.
+    "MISTRAL_API_KEY": "test-mistral",
 }
 
 

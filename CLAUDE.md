@@ -237,6 +237,14 @@ uv run check-style --book <slug> --chapter N
 are the hardest constraint in the project; assembling and reading a prompt
 costs nothing, generating costs a call.
 
+**There is no editorial command.** `editorial/pass_runner.py` and
+`editorial/reconciler.py` are tested library code with no entry point;
+Phase 6 wires them into `write-session`. Until then, exercising them
+means a throwaway script against a temp copy of the fixture — see
+progress.md's next-session section for the shape of one. The free half
+of the continuity check needs no key and no script:
+`find_number_conflicts(parse_facts(tracker_text), chapter_body)`.
+
 ---
 
 ## Commit conventions
@@ -255,14 +263,31 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 
 ---
 
-## The thing most likely to go wrong
+## The two things most likely to go wrong
 
-Not a bug. The project builds a resumable, provenance-tracked,
-hash-verified pipeline around a generator whose output quality has never
-been tested, and discovers at chapter thirty that the prose is competent and
-forgettable.
+**The original one.** Not a bug. The project builds a resumable,
+provenance-tracked, hash-verified pipeline around a generator whose output
+quality has never been tested, and discovers at chapter thirty that the
+prose is competent and forgettable.
 
 The architecture makes state safe. It does not make prose good — that comes
 from the story bible, the style guide, the beat sheet, and the base model,
 none of which are engineering problems. Keep OQ-04 (the prose spike) visible
 and do not let it slip behind the interesting work.
+
+**The one that stopped being hypothetical on 2026-09-01.** The continuity
+layer catches nothing and says so in a way that reads as success. Pointed
+at its first real case — a chapter saying "nine corrections" against a
+locked fact saying two, with that fact in the same prompt — the editorial
+pass returned an empty violation list and then wrote the contradiction
+into the summary it appended to canon.
+
+That specific case is now caught, by a deterministic check that runs
+before the call (specs §16) and by a refusal to reconcile a chapter that
+contradicts canon (invariant 6). Neither of those makes the general
+problem go away. Every contradiction that is not a bare number — a name,
+a date, an ordering, a capability — is still judged by a model that has
+demonstrably returned `[]` on an easier case, and an empty violation list
+is indistinguishable from a clean chapter (pitfall A6, OQ-10). Treat
+every "no violations" result as unproven, and be suspicious of any
+change that makes the pass cheaper or quieter.
