@@ -46,3 +46,11 @@ class EditorialError(NovelEngineError):
     (specs.md §12) and must not walk the drafting fallback chain
     (invariant 3).
     """
+
+
+class StateMachineError(NovelEngineError):
+    """An illegal session state machine transition was attempted.
+
+    Raised when attempting a transition not permitted by specs.md §11,
+    or when encountering an inconsistent or blocked session pointer.
+    """

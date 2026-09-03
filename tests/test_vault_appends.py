@@ -257,6 +257,7 @@ def test_vault_exposes_no_general_canon_writer() -> None:
     writers = {name for name in public if name.startswith(("write", "append", "flip"))}
     assert writers == {
         "write_chapter",
+        "write_next_step",
         "append_fact",
         "append_thread",
         "append_summary",

@@ -9,6 +9,9 @@ canon file" function (invariant 1).
 Phase 3 additions, same rule: write_chapter (create-only chapter file)
 and flip_manifest_status (the single permitted mechanical edit to
 plot-outline.md — the status field of one row, nothing else).
+
+Phase 6 addition: write_next_step (the single permitted overwrite primitive
+for log/next-step.md — specs §8, architecture §3).
 """
 
 from __future__ import annotations
@@ -37,6 +40,11 @@ from novel_engine.core.outline import (
     LEGAL_STATUSES,
     MANIFEST_BEGIN,
     MANIFEST_END,
+)
+from novel_engine.core.state_machine import (
+    NextStep,
+    parse_next_step,
+    serialize_next_step,
 )
 
 CHAPTER_FILE = re.compile(r"^chapter-(\d{3,4})\.md$")
@@ -640,3 +648,41 @@ def canon_transaction(paths: Sequence[Path]) -> Iterator[Path]:
             f"Canon change aborted: {exc}.{detail} Pre-change copies are in {scratch}."
         ) from exc
     shutil.rmtree(scratch, ignore_errors=True)
+
+
+# --- session pointer --------------------------------------------------------
+
+
+def next_step_path(book_root: Path) -> Path:
+    return book_root / "log" / "next-step.md"
+
+
+def read_next_step(book_root: Path) -> NextStep:
+    path = next_step_path(book_root)
+    if not path.is_file():
+        raise VaultError(f"Missing next-step pointer: {path}.")
+    return parse_next_step(path.read_text(encoding="utf-8"))
+
+
+def write_next_step(book_root: Path, step: NextStep) -> Path:
+    """Write log/next-step.md. The only canon-adjacent overwrite primitive (specs §8).
+
+    - Mode is overwrite (architecture §3: pure operational pointer, no history value).
+    - Writes the frontmatter machine contract and the prose note.
+    - Re-reads from disk and verifies that what landed parses back to an
+      identical NextStep.
+    """
+    path = next_step_path(book_root)
+    if not path.parent.is_dir():
+        raise VaultError(f"Missing log directory: {path.parent}.")
+
+    text = serialize_next_step(step)
+    path.write_text(text, encoding="utf-8")
+
+    verified = parse_next_step(path.read_text(encoding="utf-8"))
+    if verified != step:
+        raise VaultError(
+            f"Post-write verification failed for {path}: content on disk "
+            "does not match the NextStep object."
+        )
+    return path
