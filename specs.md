@@ -346,9 +346,11 @@ who caused it. Chapter 15 picks up with Lyra, who does not yet know.
 · `reconciled` · `complete`. On startup the engine reads this to decide
 whether to run fresh, resume, or refuse.
 
-*(Status as of 2026-08-26: this file's format is fixed and the fixture
-ships it, but nothing reads or writes its frontmatter yet — persistence
-of session phases is Phase 6 work.)*
+*(Implemented in Phase 6 Session 9: `core/state_machine.py` defines the
+Pydantic schema `NextStepFrontmatter`/`NextStep` with `extra="forbid"`,
+`parse_next_step`, and `serialize_next_step`. `core/vault.py` provides
+`read_next_step` and `write_next_step`, which verifies round-trip by
+re-reading from disk — ADR-0010.)*
 
 ---
 
@@ -492,8 +494,10 @@ as OQ-03.
 
 - Every phase transition is persisted to `log/next-step.md` before the
   next phase begins. A crash between phases is therefore always resumable.
-  *(Phase 6 — v1 currently persists the chapter, manifest flip, and audit
-  JSON, but not yet the phase pointer.)*
+  *(Phase 6 Session 9: `core/state_machine.py` defines `LEGAL_TRANSITIONS`,
+  `validate_transition()`, and `SessionStateMachine.transition()`, which writes
+  and verifies each phase pointer before the subsequent phase runs.
+  Batch 3 resume orchestration and Batch 4 CLI integration are in progress.)*
 - `editorial-pending` is reachable three ways, all of them leaving canon
   untouched: no editor route answered, the response never validated
   within `max_repair_attempts`, or the delta validated and reported a

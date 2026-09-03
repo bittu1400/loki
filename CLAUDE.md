@@ -126,20 +126,19 @@ ADR, never a shortcut. There are six.
 
 - **`core/vault.py` is the only module that writes to disk.** Everything
   else returns data. This is what makes the authority model reviewable.
-- **`vault.py` exposes narrowly-scoped primitives only** — as of Phase 5:
+- **`vault.py` exposes narrowly-scoped primitives only** — as of Phase 6:
   `scaffold_book`, `write_chapter` (create-only, hash-verified),
-  `flip_manifest_status` (single-cell mechanical edit), and five canon
+  `flip_manifest_status` (single-cell mechanical edit), five canon
   appends: `append_fact`, `append_thread`, `append_deepen_question`,
-  `append_summary`, `flip_thread_status`. Five rather than the four
-  originally planned — the delta carries `deepen_questions` and the queue
-  is engine-append-only, so the reconciler cannot apply a valid delta
-  without the fifth. **Each verifies its own write by re-parsing the
-  file**, not by trusting the string it built. `canon_transaction`
-  (ADR-0007) snapshots and restores canon around a multi-file apply; the
-  only bytes it can write are bytes it just copied. There is deliberately
-  no general "write canon file" function, and `test_vault_appends.py`
-  asserts the exact set of public writers — add a primitive and that test
-  fails until the list is updated on purpose.
+  `append_summary`, `flip_thread_status`, and one overwrite primitive:
+  `write_next_step` (`log/next-step.md` pointer, specs §8, ADR-0010).
+  **Each verifies its own write by re-parsing the file**, not by
+  trusting the string it built. `canon_transaction` (ADR-0007) snapshots
+  and restores canon around a multi-file apply; the only bytes it can write
+  are bytes it just copied. There is deliberately no general "write canon
+  file" function, and `test_vault_appends.py` asserts the exact set of
+  public writers — add a primitive and that test fails until the list is
+  updated on purpose.
 - **`generated_hash` is computed by `vault.write_chapter`, never by its
   callers** — callers who supply one are rejected. It hashes the exact
   post-frontmatter bytes as stored (leading blank lines stripped,

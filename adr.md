@@ -688,3 +688,69 @@ Warnings remain advisory and reconcile normally.
   and more surgical. Rejected for now: it makes the rule depend on a
   distinction the author has not yet had reason to maintain, and no case
   exists to tune it against.
+
+---
+
+## ADR-0010 — Session pointer persistence and resumption state machine
+
+**Date:** 2026-09-03 · **Status:** accepted · **Session:** 9
+
+### Context
+
+Specs §11 specifies a phase lifecycle for each chapter session:
+
+```
+target -> drafted -> styled -> [editorial-pending | reconciled] -> complete
+```
+
+A crash, network timeout, or kill signal during drafting, style checking,
+editorial review, or reconciliation leaves the vault in an intermediate
+state. Without an authoritative, persistently updated pointer:
+
+1. A subsequent run cannot distinguish an interrupted draft from a completed
+   one that simply hasn't been reviewed yet.
+2. A crash during style checking or editorial review would risk silently
+   re-running drafting, generating new prose and orphaning the existing chapter.
+3. Architecture §3 identifies `log/next-step.md` as the single file whose
+   mode is overwrite: a pure operational pointer with no history value.
+   Yet the one-writer rule (invariant 1) requires all disk writes to go
+   through narrowly-scoped primitives in `core/vault.py`.
+
+### Decision
+
+1. **`write_next_step` is the only overwrite primitive in `core/vault.py`.**
+   It writes `log/next-step.md` and immediately re-reads and re-parses the
+   file from disk, verifying that the on-disk content matches the input
+   `NextStep` object. No general "write canon file" primitive exists.
+2. **Strict schema enforcement (`core/state_machine.py`).** Frontmatter
+   fields (`next_chapter`, `next_pov`, `last_session_id`, `last_session_phase`,
+   `last_session_status`, `blocked`, `blocked_reason`) are validated with
+   `extra="forbid"`. The prose note sits below the frontmatter.
+3. **Persist before entering the next phase.** `SessionStateMachine.transition`
+   enforces legal phase transitions (`validate_transition`) and writes the
+   new phase pointer to disk *before* the subsequent work begins (specs §11).
+4. **Fail closed on blocked sessions.** When `blocked: true`, any phase
+   transition is refused with `StateMachineError` until explicitly unblocked.
+
+### Consequences
+
+- **Positive:** Every crash between phases is fully resumable; the pipeline
+  always knows the exact phase reached.
+- **Positive:** Overwrite authority is strictly confined to `log/next-step.md`;
+  all canon files remain append-only or single-cell status flips.
+- **Negative:** Every phase step incurs a disk write and verification read.
+  Since this touches a single small markdown file locally, latency is
+  negligible (< 1 ms).
+- **Residual:** Resumption orchestration in `cli/write_session.py` (reading
+  the pointer on startup and branching) is deferred to Batches 3 & 4.
+
+### Alternatives considered
+
+- **General file-writer primitive.** Rejected: opens the door to overwriting
+  canon files, defeating invariants 1 and 5.
+- **Write `next-step.md` only on session completion.** Rejected: a crash during
+  editorial pass or reconciliation would leave the session in an untracked
+  state, making resumption impossible.
+- **In-memory state machine only.** Rejected: does not survive process
+  termination.
+

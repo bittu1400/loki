@@ -184,14 +184,12 @@ The model therefore emits a **delta**, and Python appends.
 Step 9's fail-closed behaviour matters more than it looks. A half-applied
 delta is worse than no delta: it corrupts canon while reporting success.
 
-**Implementation status (2026-09-01).** Steps 1, 3–7 and 11 (minus the
-`next-step.md` update) run today from `write-session`. Steps 8–10 exist
-as tested library code — `quality/`, `editorial/pass_runner.py`,
-`editorial/reconciler.py` — but **nothing calls them from a CLI yet**;
-`check-style` runs step 8's style half on demand. Step 2 is a stub.
-Wiring 8–10 into the session and persisting the phase pointer is Phase 6,
-and doing it earlier would give the engine a way to write canon on a real
-vault while OQ-01 is unresolved.
+**Implementation status (2026-09-03).** Steps 1, 3–7 and 11 run from
+`write-session`. Steps 8–10 exist as tested library code (`quality/`,
+`editorial/pass_runner.py`, `editorial/reconciler.py`). Phase 6 Session 9
+implemented the `log/next-step.md` contract, `vault.write_next_step()`, and
+`SessionStateMachine` (Batches 1 & 2); Step 2 (resume) and wiring the full
+pipeline into `write-session` (Batches 3 & 4) are currently in progress.
 
 ## 5. Context assembly — what the model actually sees
 

@@ -4,7 +4,7 @@ Single source of truth for project state. Updated at the end of every
 session. The next session must be able to start from this file alone,
 with no conversational context.
 
-**Last updated:** 2026-09-01 · end of Session 8
+**Last updated:** 2026-09-03 · Session 9 (Batches 1 & 2 complete)
 
 ---
 
@@ -15,25 +15,28 @@ with no conversational context.
 against `vault/example-book/`, including one live end-to-end run on the
 real editor route. Still must NOT run against a real vault: OQ-01 is
 unresolved and no real book exists yet.
-**Phase 6 (session state machine + resume) — ⬜ next.**
+**Phase 6 (session state machine + resume) — 🟡 in progress (Batches 1 & 2 complete, S9).**
 
-The full path now exists: `write-session` drafts and writes a chapter;
-`check-style` measures it for free; `editorial.pass_runner` reviews it
-and returns a schema-validated delta or a refusal; `editorial.reconciler`
-applies that delta to canon all-or-nothing through the vault primitives.
-**277 tests pass, ruff clean.**
+The full pipeline primitives and lifecycle state machine now exist:
+`write-session` drafts and writes a chapter; `check-style` measures it
+for free; `editorial.pass_runner` reviews it and returns a delta;
+`editorial.reconciler` applies it through transactional canon appends;
+`core/state_machine.py` and `vault.write_next_step` enforce legal phase
+transitions and persist the phase pointer to `log/next-step.md` before each
+next phase begins.
+**304 tests pass, ruff clean.**
 
-**OQ-10 was chased down in the same session and is half-answered.** The
-pass initially missed the one contradiction it was built to catch. Five
-live runs later: a deterministic number check now runs before the call
-(#30), a delta carrying a critical violation cannot be reconciled at all
-(#29), and the primary editor catches the case it missed twice. What is
-still unproven is every contradiction a regex cannot see — names, dates,
+**OQ-10 was chased down in Session 8 and is half-answered.** The pass
+initially missed the one contradiction it was built to catch. Five live
+runs later: a deterministic number check now runs before the call (#30),
+a delta carrying a critical violation cannot be reconciled at all (#29),
+and the primary editor catches the case it missed twice. What is still
+unproven is every contradiction a regex cannot see — names, dates,
 rewritten quantities, capabilities. OQ-10 is downgraded to 🟠 and
 narrowed to exactly that.
 
-Nothing is wired into a CLI yet — Phase 6 wires the pass and the
-reconciler into a session and persists the phase pointer.
+Next: Batches 3 & 4 wire resumption logic and the state machine into
+the `write-session` CLI.
 
 ## Phase tracker
 
@@ -45,8 +48,63 @@ reconciler into a session and persists the phase pointer.
 | 3 | Single-chapter generation + continuation loop | ✅ complete (S5) | — |
 | 4 | Deterministic style checks | ✅ complete (S7) | — |
 | 5 | Editorial delta pass + reconciler | ✅ complete (S8) | **OQ-01 (real vaults only)** |
-| 6 | Session state machine + resume | ⬜ next | — |
+| 6 | Session state machine + resume | 🟡 in progress (Batches 1-2 done, S9) | — |
 | — | *Deferred (ADR-0001):* GitHub Actions, approval gate, Cousins endpoint, `new_book.py` interview | ⏸ | — |
+
+---
+
+## Session 9 — 2026-09-03
+
+**Phase 6 in progress — Batches 1 and 2 complete and committed.** The machine
+contract for the session pointer, its vault primitives, the lifecycle
+transition engine, and crash-resumption persistence are fully built and
+tested.
+
+### Done
+
+**Batch 1 — `log/next-step.md` read/write (`11780f4`).**
+- Implemented the specs §8 machine contract in `core/state_machine.py`:
+  `NextStepFrontmatter` and `NextStep` with `extra="forbid"`, validating
+  all seven frontmatter fields (`next_chapter`, `next_pov`, `last_session_id`,
+  `last_session_phase`, `last_session_status`, `blocked`, `blocked_reason`) and
+  the prose markdown note below it. `parse_next_step()` rejects unclosed or
+  invalid YAML, non-mapping frontmatter, and unrecognized fields with `ContextError`.
+  `serialize_next_step()` formats the markdown preserving field order.
+- Added `StateMachineError` to `core/errors.py`.
+- Added narrowly-scoped primitives in `core/vault.py`: `next_step_path()`,
+  `read_next_step()`, and `write_next_step()`. In accordance with architecture
+  §3 and the one-writer rule (invariant 1), `log/next-step.md` is the only
+  canon-adjacent file whose mode is overwrite. `write_next_step()` verifies its
+  own write by re-reading and re-parsing what landed on disk (**decision #33**,
+  **ADR-0010**).
+- Updated `test_vault_exposes_no_general_canon_writer` in
+  `tests/test_vault_appends.py` to assert `write_next_step`. Added 16 tests in
+  `tests/test_next_step.py`.
+
+**Batch 2 — `core/state_machine.py` lifecycle transitions (`fa79024`).**
+- Implemented the specs §11 phase lifecycle:
+  `target` → `drafted` → `styled` → `[editorial-pending | reconciled]` → `complete`.
+  `LEGAL_TRANSITIONS` defines all valid edges.
+- Added `validate_transition()` and `build_next_step()`. Illegal transitions
+  raise `StateMachineError` naming the attempted transition and all valid
+  options.
+- Added `SessionStateMachine` with `.load(book_root)` and `.transition()`.
+  Crucial guarantee: **every phase transition is persisted to `log/next-step.md`
+  via `write_next_step()` before the subsequent phase begins** (specs §11
+  crash-resumption rule, **decision #34**, **ADR-0010**).
+- Added explicit blocker support: `.mark_blocked(reason)` and `.unblock()`.
+  Transitions fail closed if the pointer is marked `blocked: true`.
+- Added 11 tests in `tests/test_state_machine.py`.
+
+### Verified
+
+- [x] 304 tests pass (277 → 293 → 304 across the batches), ruff clean and formatted.
+- [x] `vault/example-book/log/next-step.md` and template `next-step.md` both parse cleanly.
+- [x] Full happy-path lifecycle walkthrough (`complete` → `target` → `drafted` →
+      `styled` → `reconciled` → `complete`) verified against disk.
+- [x] `editorial-pending` retry and recovery branches verified against disk.
+- [x] Blocker enforcement verified: transitions are refused when blocked and succeed once unblocked.
+- [x] Re-parsing post-write verification in `write_next_step` ensures zero write corruption.
 
 ---
 
@@ -706,29 +764,29 @@ one finding on the pre-fix ch-005, zero on every committed chapter.
 ### Read first
 
 1. This file, CLAUDE.md (invariants 1–3, the vault primitive list, and
-   the two new structural facts about the editorial pass)
-2. decisions.md #13–32 — do not relitigate. #15/#16 are the shape every
+   the structural facts about the editorial pass and state machine)
+2. decisions.md #13–34 — do not relitigate. #15/#16 are the shape every
    write primitive copies; #22 is the no-defaults thresholds rule;
    #25 is why ch-005's hash is deliberately stale; #26 is why the
    editorial prompt is packaged rather than per-book; #27 is thread ID
-   allocation and its one honest gap; **#28 was superseded by #31 the
-   same day** — read both, the pair is the clearest record in the file
-   of a decision surviving exactly as long as its evidence; #29/#30/#32
-   are the three rules that came out of the live editorial runs
+   allocation and its one honest gap; #28 was superseded by #31 the
+   same day; #29/#30/#32 are the three rules that came out of the live
+   editorial runs; **#33 is write_next_step as the sole overwrite primitive**;
+   **#34 is phase persistence before each step begins**.
 3. [open-questions.md](open-questions.md) **OQ-10 first**, then OQ-01
 4. [specs.md](specs.md) §11 (state machine) and §8 (`next-step.md`
    contract) for Phase 6. §12 is now the full validation contract as
    implemented, §16 specifies the number check, and §4-§7 carry an
    "Engine behaviour" block each — read the one for whatever you are
    about to touch
-5. [adr.md](adr.md) **ADR-0007, 0008, 0009** — this session's three
-   architectural records: transactional canon writes, why continuity
-   checking is partly Python's job now, and why a contradicting chapter
-   cannot reconcile
+5. [adr.md](adr.md) **ADR-0007, 0008, 0009, 0010** — transactional canon
+   writes, why continuity checking is partly Python's job, why a
+   contradicting chapter cannot reconcile, and **ADR-0010 (session pointer
+   persistence & state machine)**
 6. Pitfalls A1/A2 stay live — every future canon writer answers to them.
-   **A6, A7 and C10 are new** and all three are measured, not
+   **A6, A7 and C10** are live and all three are measured, not
    hypothetical
-7. best-practices §8 now lists **six** invariants, not five
+7. best-practices §8 lists **six** invariants
 
 ### What now exists (module map)
 
@@ -743,15 +801,19 @@ src/novel_engine/
                         #   chapter_path, split_chapter_file, write_chapter,
                         #   flip_manifest_status, append_fact, append_thread,
                         #   append_deepen_question, append_summary,
-                        #   flip_thread_status, canon_transaction (ADR-0007).
+                        #   flip_thread_status, canon_transaction (ADR-0007),
+                        #   next_step_path, read_next_step, write_next_step (ADR-0010).
                         #   Still no general "write canon file" function, and
                         #   a test asserts the exact set of public writers
-  core/errors.py        # + EditorialError (permanent, never fallback-eligible)
-  core/state_machine.py # STUB — Phase 6 work
+  core/errors.py        # + EditorialError, + StateMachineError
+  core/state_machine.py # NextStepFrontmatter, NextStep, parse_next_step,
+                        #   serialize_next_step, LEGAL_TRANSITIONS,
+                        #   validate_transition, build_next_step,
+                        #   SessionStateMachine (load, transition, mark_blocked, unblock)
   drafting/generate.py  # draft_chapter(): continuation loop, ADR-0005 stubs
   drafting/provenance.py# make_session_id, chapter_frontmatter, utc_timestamp
-  providers/*           # unchanged this session
-  quality/metrics.py, style_checks.py   # unchanged this session
+  providers/*           # unchanged
+  quality/metrics.py, style_checks.py   # unchanged
   quality/continuity_numbers.py  # find_number_conflicts(facts, body),
                         #   render_conflicts(), quantities(). Decision #30,
                         #   ADR-0008, specs §16. Tuned false-positive
@@ -765,16 +827,13 @@ src/novel_engine/
   editorial/reconciler.py  # reconcile(book, delta, session_id) -> Reconciliation.
                         #   The only caller of the canon appends. Refuses
                         #   any delta with a critical violation (#29)
-  cli/{new_book,write_session,check_style}.py  # unchanged; NONE of them
-                        #   calls the editorial pass yet (Phase 6)
+  cli/{new_book,write_session,check_style}.py  # NONE of them calls editorial
+                        #   or state_machine yet (Phase 6 Batches 3 & 4)
 src/novel_engine/templates/book/            # packaged scaffolder source
 src/novel_engine/templates/editorial-prompt.md  # engine-owned (decision #26)
-vault/example-book/     # fixture, unchanged this session — the live run used
-                        #   a temp copy, so the committed fixture still has
-                        #   chapters 001-005 with summaries for 001-002 only
-tests/                  # 20 files, 277 tests. New: test_editorial_schema.py,
-                        #   test_vault_appends.py, test_editorial_pass.py,
-                        #   test_reconciler.py, test_continuity_numbers.py
+vault/example-book/     # fixture, unchanged
+tests/                  # 22 files, 304 tests. New in S9: test_next_step.py,
+                        #   test_state_machine.py
 ```
 
 Entry points (`pyproject.toml`) are unchanged: `new-book`,
@@ -784,27 +843,23 @@ work, and adding a CLI that can write canon on a real vault before
 OQ-01 resolves would hand the engine the ability the docs say it must
 not have.
 
-### Phase 6 batches (proposed)
+### Phase 6 batches
 
 Commit after each batch. Do not push.
 
-**Batch 1 — `log/next-step.md` read/write**: the frontmatter contract in
-specs §8, with a vault primitive for the write (it is the one canon-
-adjacent file whose mode is *overwrite* — architecture §3 — so it needs
-its own narrowly-scoped primitive, not a general writer).
-
-**Batch 2 — `core/state_machine.py`**: the specs §11 phases, the legal
-transitions, and persisting the phase pointer before each next phase
-begins.
-
-**Batch 3 — resume**: re-running a session whose chapter exists resumes
-from the recorded phase or refuses with a precise message. Never
-overwrites.
-
-**Batch 4 — wire the editorial pass into `write-session`**: draft →
-style → editorial → reconcile → complete, with the violation list
-reported as ADVISORY until OQ-10 says otherwise, and an
-`editorial-pending` exit that is visibly distinct from success.
+- [x] **Batch 1 — `log/next-step.md` read/write (`11780f4`)**: the frontmatter contract in
+  specs §8, with `write_next_step` in `core/vault.py` (the one canon-adjacent
+  file whose mode is *overwrite* — architecture §3 — verified by re-parsing).
+- [x] **Batch 2 — `core/state_machine.py` (`fa79024`)**: the specs §11 phases, legal
+  transitions, blocker enforcement, and persisting the phase pointer before
+  each next phase begins.
+- [ ] **Batch 3 — resume**: re-running a session whose chapter exists resumes
+  from the recorded phase or refuses with a precise message. Never
+  overwrites without explicit confirmation.
+- [ ] **Batch 4 — wire the editorial pass & state machine into `write-session`**:
+  target → draft → style → editorial → reconcile → complete, with the
+  violation list reported as ADVISORY until OQ-10 says otherwise, and an
+  `editorial-pending` exit that is visibly distinct from success.
 
 ### Do not do next session
 
