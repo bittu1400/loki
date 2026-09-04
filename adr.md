@@ -802,7 +802,10 @@ lifecycle:
 2. **`editorial.enabled: false` is honoured**, and `styled -> complete` joins
    `LEGAL_TRANSITIONS` as the edge that path takes. It is the only way to
    reach `complete` without canon being written, and it is what a real vault
-   can safely run while OQ-01 is open.
+   can safely run while OQ-01 is open. *(OQ-01 closed 2026-09-04 in
+   ADR-0013, so this is no longer the only safe shape — it is now what a
+   book runs when the author wants drafts without a continuity ledger, or
+   when the machine has no git at all, decision #41.)*
 3. **Exit code 2 = drafted, not reconciled.** `editorial-pending` from any of
    its three §11 routes exits 2, and the CLI names which route was taken. 0
    stays "drafted and finished", 1 stays "refused, or all routes exhausted".
