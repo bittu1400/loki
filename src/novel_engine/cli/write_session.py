@@ -366,10 +366,9 @@ def _review(
                 f"[yellow]editorial-pending[/yellow] {refusal or result.reason}"
             )
             console.print(f"audit:    {audit_path}")
-            console.print(
-                f"Canon is untouched and the chapter stands. Retry: "
-                f"write-session --book {config.slug} --resume"
-            )
+            # The reason string already says canon is untouched; repeating
+            # it here would bury the one line that says what to do next.
+            console.print(f"Retry:    write-session --book {config.slug} --resume")
             return EXIT_EDITORIAL_PENDING
 
         machine.transition("reconciled", session_id=session_id, status="reconciled")
