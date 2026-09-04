@@ -754,3 +754,93 @@ state. Without an authoritative, persistently updated pointer:
 - **In-memory state machine only.** Rejected: does not survive process
   termination.
 
+
+---
+
+## ADR-0011 — `write-session` orchestration, resume gate, and outcome contract
+
+**Date:** 2026-09-04 · **Status:** accepted · **Session:** 10
+
+### Context
+
+ADR-0010 built the pointer and the state machine and deliberately left the
+orchestration out: nothing read `log/next-step.md` on startup, and nothing
+invoked the editorial pass from a shell. That was correct while the pass was
+untested library code, and it stops being correct now — Phase 6 Batches 3
+and 4 exist to close exactly that gap.
+
+Wiring it up forces four questions the earlier ADRs left open, because each
+of them only becomes answerable once a single command owns the whole
+lifecycle:
+
+1. `complete` is defined (specs §11) as "chapter status = pending-review",
+   and no primitive can set a chapter's status. specs §3 already records
+   this as Phase 6 work.
+2. `editorial.enabled` has been parsed and unread since Phase 5. The specs
+   §11 diagram has no exit from `styled` that does not pass through the
+   editorial pass, so honouring the key requires a lifecycle edge that does
+   not exist.
+3. specs §15 defines exit codes 0 and 1 only. A chapter that drafted
+   successfully but did not reconcile is neither.
+4. specs §15 lists `--resume`, and specs §11 says a re-run "resumes from the
+   recorded phase, or refuses with a precise message". Something has to
+   select between resuming and refusing.
+
+### Decision
+
+1. **`vault.flip_chapter_status(book_root, chapter_number, new_status,
+   expected_current=...)`** — the second single-cell mechanical edit, beside
+   `flip_manifest_status`. It rewrites one frontmatter key and re-parses the
+   file to verify. It never touches the body, so `generated_hash` (computed
+   over post-frontmatter bytes) is unaffected and a hand-edited chapter stays
+   detectably hand-edited (decision #25).
+2. **`editorial.enabled: false` is honoured**, and `styled -> complete` joins
+   `LEGAL_TRANSITIONS` as the edge that path takes. It is the only way to
+   reach `complete` without canon being written, and it is what a real vault
+   can safely run while OQ-01 is open.
+3. **Exit code 2 = drafted, not reconciled.** `editorial-pending` from any of
+   its three §11 routes exits 2, and the CLI names which route was taken. 0
+   stays "drafted and finished", 1 stays "refused, or all routes exhausted".
+4. **`--resume` is required to continue an interrupted session.** Without it,
+   a run whose pointer records a mid-flight phase for an existing chapter
+   refuses, naming the chapter, the phase, and the flag. `--resume` re-enters
+   the pipeline at the recorded phase and never re-drafts existing prose;
+   replacing prose is still `--force` plus a typed confirmation (invariant 5).
+
+### Consequences
+
+- **Positive:** one command owns the documented lifecycle end to end, and
+  every phase it reaches is on disk before the next one starts.
+- **Positive:** a caller can tell the three outcomes apart without parsing
+  prose — 0 finished, 1 nothing happened, 2 prose written and canon clean.
+- **Positive:** `enabled: false` is a real drafting-only mode, so the engine
+  has a configuration in which it provably cannot write canon.
+- **Negative:** the writer allowlist grows by one, and every future reader of
+  `vault.py` has one more primitive to account for. Mitigated by the
+  allowlist test, which fails until the addition is made deliberately.
+- **Negative:** `--resume` is a flag the author must remember. The refusal
+  message carries the exact command, so the cost is one re-run, not a
+  guessing game.
+- **Residual:** exit 2 is a new contract for automation that does not exist
+  yet (ADR-0001 defers scheduling). It is cheap to define now and expensive
+  to retrofit once something depends on 0-or-1.
+- **Residual:** resuming at `styled` or `editorial-pending` re-runs the
+  editorial call and spends quota. Resuming at `reconciled` spends nothing.
+
+### Alternatives considered
+
+- **Leave chapter status at `draft`.** Rejected: `complete` would then be a
+  phase with no observable effect on the chapter it completes, and specs §3's
+  note would stay unimplemented with nothing scheduled to implement it.
+- **Route disabled-editorial to `editorial-pending`.** Rejected: no pass is
+  pending. The pointer would report a state the author cannot resolve by
+  re-running, and exit 2 would fire on a configuration working as intended.
+- **Exit 1 for `editorial-pending`.** Rejected: it is the same code as "the
+  chapter already exists and I refused", so no script could distinguish
+  "nothing happened" from "1000 words landed and canon is clean".
+- **Exit 0 for `editorial-pending`.** Rejected for the mirror reason: a
+  chapter whose continuity was never checked is not a finished chapter, and
+  OQ-10 is precisely the reason not to let that read as success.
+- **Automatic resumption with no flag.** Rejected: bare re-runs would spend
+  free-tier calls on a chapter the author may not remember starting. Daily
+  caps are the hardest constraint in the project.
