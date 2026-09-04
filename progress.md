@@ -139,14 +139,24 @@ session left the previous chapter's note standing over the next one.
 - [x] `editorial.enabled: false` completes without asking the editor
       anything and without touching canon.
 - [x] Every refusal path asserted by message, not just by exit code.
+- [x] The real `write-session` binary driven against a scratch copy of
+      the fixture (deleted afterwards; the committed fixture was never
+      touched), with deliberately invalid keys: `--dry-run` exits 0 and
+      prints the prompt; an interrupted pointer refuses with the exact
+      three-line message; `--resume` skips drafting, runs style, fails
+      the editorial call, exits **2**, leaves `continuity-tracker.md`
+      byte-identical, and parks the pointer at `editorial-pending`.
+      This proves the plumbing and the exit contract, not model
+      behaviour — the keys were junk and every route returned 400.
 
 ### Not done, and deliberately
 
-- **No live API run this session.** Every assertion above is against
-  fakes. The one live editorial evidence in the project is still
-  Session 8's five runs. Nothing about the wiring has been proven against
-  a real provider, and the first real run is worth doing on the fixture
-  with `--dry-run` first.
+- **No live API run with working keys.** The smoke run above reached real
+  endpoints, but only to be rejected, so it exercised the failure lane and
+  nothing else. The one live editorial evidence in the project is still
+  Session 8's five runs, and those went through a throwaway script rather
+  than `write-session`. A chapter has never been drafted AND reconciled by
+  the wired command.
 - **The OQ-10 non-numeric experiment is still not run.** It costs two
   calls and nothing depends on it, but it is still the only untested
   contradiction class.
