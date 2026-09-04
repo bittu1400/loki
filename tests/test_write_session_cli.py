@@ -152,18 +152,14 @@ def test_full_run_writes_chapter_audit_and_flips_manifest(book) -> None:
     assert len(sessions) == 1
     payload = json.loads(sessions[0].read_text())
     assert payload["chapter_number"] == 3
-    assert payload["final_phase"] == "draft"
+    assert payload["final_phase"] == "complete"  # the phase the run reached
     assert payload["calls"][0]["provider"] == "openrouter"
 
 
 def new_session_files(vault_root: Path) -> list[Path]:
     """Session JSONs created by the run — reset_fixture_state cleared
     everything the committed fixture shipped with."""
-    return sorted(
-        path
-        for path in (vault_root / "example-book/log/sessions").glob("sess-*.json")
-        if not path.name.endswith("-editorial.json")
-    )
+    return sorted((vault_root / "example-book/log/sessions").glob("sess-*.json"))
 
 
 def test_all_routes_fail_stub_exit_code_one(book) -> None:
@@ -258,8 +254,10 @@ def canon_bytes(vault_root: Path) -> dict[str, str]:
     }
 
 
-def editorial_audits(vault_root: Path) -> list[Path]:
-    return sorted((vault_root / "example-book/log/sessions").glob("*-editorial.json"))
+def audit_payload(vault_root: Path) -> dict:
+    files = new_session_files(vault_root)
+    assert len(files) == 1, files
+    return json.loads(files[0].read_text())
 
 
 def test_completed_session_promotes_chapter_and_advances_pointer(book) -> None:
@@ -282,6 +280,13 @@ def test_completed_session_promotes_chapter_and_advances_pointer(book) -> None:
     assert step.last_session_phase == "complete"
     assert step.next_chapter == 4  # the next planned manifest row, not 3
     assert step.next_pov == "brannec-tull"
+    # specs §12: the delta's next_step_note is the pointer's prose half.
+    assert step.note == "Sela has not been told."
+
+    # specs §13: the deterministic metrics belong in the session record.
+    payload = audit_payload(book)
+    assert payload["style_metrics"]["word_count"] == 45
+    assert payload["resumed"] is False
 
 
 def test_completed_session_appends_canon_and_writes_an_editorial_audit(book) -> None:
@@ -304,11 +309,12 @@ def test_completed_session_appends_canon_and_writes_an_editorial_audit(book) -> 
         for line in text.splitlines():
             assert line in after[name]
 
-    audits = editorial_audits(book)
-    assert len(audits) == 1
-    payload = json.loads(audits[0].read_text())
+    payload = audit_payload(book)["editorial"]
     assert payload["status"] == "validated"
     assert payload["applied"]["summary_added"] is True
+    # specs §12: the delta is the only place a `progressed` note reaches
+    # the author, so the audit must carry it whole.
+    assert payload["delta"]["chapter_summary"].startswith("Ovist walked")
 
 
 def test_interrupted_session_refuses_and_names_the_phase(book, capsys) -> None:
@@ -474,7 +480,7 @@ def test_editorial_disabled_completes_without_touching_canon(book) -> None:
     assert canon_bytes(book) == before
     assert providers["gemini"].calls == []  # the editor was never asked
     assert pointer(book).last_session_phase == "complete"
-    assert editorial_audits(book) == []
+    assert "editorial" not in audit_payload(book)
 
 
 def test_dry_run_on_a_drafted_chapter_assembles_nothing(book) -> None:

@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from rich.console import Console
@@ -60,17 +61,30 @@ EXIT_EDITORIAL_PENDING = 2
 DRAFT_DONE_PHASES = frozenset({"drafted", "styled", "editorial-pending", "reconciled"})
 
 
-def _audit_payload(
-    config: BookConfig, assembled: AssembledPrompt, result: DraftResult
-) -> dict[str, object]:
-    """specs.md §13: immutable, written once, no secrets."""
+def _write_audit(
+    config: BookConfig,
+    session_id: str,
+    audit: dict[str, object],
+    final_phase: str,
+) -> Path:
+    """specs §13: one record per invocation, written once at session end.
+
+    At session end and not after drafting, because a session no longer
+    ends there: the phase this file records is the phase the run actually
+    reached, which is the same string the pointer carries.
+    """
+    audit["final_phase"] = final_phase
+    path = config.root / "log" / "sessions" / f"{session_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(audit, indent=2, default=str), encoding="utf-8")
+    return path
+
+
+def _draft_audit(assembled: AssembledPrompt, result: DraftResult) -> dict[str, object]:
+    """The drafting half of the session record. No secrets, no raw prompt."""
     return {
-        "session_id": result.session_id,
-        "book_slug": config.slug,
-        "chapter_number": result.chapter_number,
         "pov": assembled.pov,
         "beat": assembled.beat,
-        "final_phase": result.status,
         "assigned_model": result.assigned_model,
         "actual_model": result.actual_model,
         "fallback_triggered": result.fallback_triggered,
@@ -138,6 +152,7 @@ def _style_phase(
     target_words: object,
     *,
     session_id: str,
+    audit: dict[str, object],
     console: Console,
 ) -> None:
     """Deterministic checks. Costs nothing, judges nothing (specs §14)."""
@@ -151,6 +166,8 @@ def _style_phase(
         style_guide_path=guide_path,
     )
     machine.transition("styled", session_id=session_id, status="styled")
+    audit["style_metrics"] = asdict(report.metrics)
+    audit["style_flagged"] = [verdict.metric for verdict in report.flagged]
 
     if not report.thresholds_present:
         console.print(
@@ -174,14 +191,13 @@ def _editorial_audit(
     applied: Reconciliation | None,
     refusal: str,
 ) -> dict[str, object]:
-    """Sibling of the drafting audit (specs §13), for the review half.
+    """The review half of the session record (specs §13).
 
-    Written separately rather than folded into the session JSON, which is
-    written once and immutable — and on a resumed run the drafting audit
-    belongs to a different session id entirely.
+    Carries the raw validated delta, which is the only place a
+    `progressed` thread note ever reaches the author (specs §12) — the
+    reconciler deliberately writes those nowhere.
     """
     return {
-        "chapter_number": result.chapter_number,
         "status": result.status,
         "reason": result.reason or refusal,
         "repair_rounds": result.repair_rounds,
@@ -190,17 +206,7 @@ def _editorial_audit(
         "fallback_triggered": result.fallback_triggered,
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,
-        "violations": [
-            {
-                "severity": violation.severity,
-                "violated_fact": violation.violated_fact,
-                "chapter_excerpt": violation.chapter_excerpt,
-                "explanation": violation.explanation,
-            }
-            for violation in (
-                result.delta.continuity_violations if result.delta else []
-            )
-        ],
+        "delta": result.delta.model_dump() if result.delta else None,
         "applied": None
         if applied is None
         else {
@@ -236,6 +242,8 @@ def _complete(
     machine: SessionStateMachine,
     *,
     session_id: str,
+    audit: dict[str, object],
+    note: str | None,
     console: Console,
 ) -> int:
     """The `complete` phase: chapter status flipped, pointer advanced."""
@@ -268,7 +276,12 @@ def _complete(
         status="pending-review",
         chapter=next_chapter,
         pov=next_pov,
+        # specs §12: the delta's next_step_note is the prose half of the
+        # pointer. It is model text about what happens next, never canon.
+        note=note,
     )
+    audit_path = _write_audit(config, session_id, audit, "complete")
+    console.print(f"audit:    {audit_path}")
     console.print(
         f"[green]complete[/green] ch-{entry.chapter_number:03d} is "
         f"pending-review; next up is chapter {next_chapter:03d} "
@@ -284,6 +297,7 @@ def _review(
     providers: dict[str, Provider],
     *,
     session_id: str,
+    audit: dict[str, object],
     console: Console,
 ) -> int:
     """styled -> [editorial-pending | reconciled] -> complete (specs §11).
@@ -293,6 +307,7 @@ def _review(
     """
     path = chapter_path(config.root, entry.chapter_number)
     fields, body = split_chapter_file(path.read_text(encoding="utf-8"))
+    note: str | None = None
 
     if machine.phase == "drafted":
         _style_phase(
@@ -302,6 +317,7 @@ def _review(
             body,
             fields.get("target_words"),
             session_id=session_id,
+            audit=audit,
             console=console,
         )
 
@@ -312,7 +328,15 @@ def _review(
             "editorial.enabled: false — no continuity review ran, and canon "
             "was not touched."
         )
-        return _complete(config, entry, machine, session_id=session_id, console=console)
+        return _complete(
+            config,
+            entry,
+            machine,
+            session_id=session_id,
+            audit=audit,
+            note=None,
+            console=console,
+        )
 
     if machine.phase in ("styled", "editorial-pending"):
         recorder = CallRecorder()
@@ -329,12 +353,7 @@ def _review(
             except (EditorialError, VaultError) as exc:
                 refusal = str(exc)
 
-        audit_path = config.root / "log" / "sessions" / f"{session_id}-editorial.json"
-        audit_path.parent.mkdir(parents=True, exist_ok=True)
-        audit_path.write_text(
-            json.dumps(_editorial_audit(result, recorder, applied, refusal), indent=2),
-            encoding="utf-8",
-        )
+        audit["editorial"] = _editorial_audit(result, recorder, applied, refusal)
 
         if applied is None:
             machine.transition(
@@ -342,10 +361,11 @@ def _review(
                 session_id=session_id,
                 status="editorial-pending",
             )
+            audit_path = _write_audit(config, session_id, audit, "editorial-pending")
             console.print(
                 f"[yellow]editorial-pending[/yellow] {refusal or result.reason}"
             )
-            console.print(f"editorial audit: {audit_path}")
+            console.print(f"audit:    {audit_path}")
             console.print(
                 f"Canon is untouched and the chapter stands. Retry: "
                 f"write-session --book {config.slug} --resume"
@@ -353,6 +373,7 @@ def _review(
             return EXIT_EDITORIAL_PENDING
 
         machine.transition("reconciled", session_id=session_id, status="reconciled")
+        note = result.delta.next_step_note if result.delta else None
         console.print(
             f"[green]reconciled[/green] {applied.canon_lines_added} canon "
             f"line(s) appended via {result.actual_model}"
@@ -361,10 +382,17 @@ def _review(
             console.print(f"threads resolved: {', '.join(applied.threads_resolved)}")
         if applied.patches_path:
             console.print(f"suggested patches: {applied.patches_path}")
-        console.print(f"editorial audit: {audit_path}")
         _report_violations(console, result)
 
-    return _complete(config, entry, machine, session_id=session_id, console=console)
+    return _complete(
+        config,
+        entry,
+        machine,
+        session_id=session_id,
+        audit=audit,
+        note=note,
+        console=console,
+    )
 
 
 def run_session(
@@ -465,6 +493,14 @@ def run_session(
         providers = build_providers(env)
 
     session_id = make_session_id()
+    audit: dict[str, object] = {
+        "session_id": session_id,
+        "book_slug": config.slug,
+        "chapter_number": entry.chapter_number,
+        "pov": entry.pov,
+        "beat": entry.beat,
+        "resumed": resuming,
+    }
 
     if resuming:
         console.print(
@@ -498,16 +534,12 @@ def run_session(
             on_attempt=recorder.record,
         )
 
-        audit_path = config.root / "log" / "sessions" / f"{session_id}.json"
-        audit_path.parent.mkdir(parents=True, exist_ok=True)
-        audit_path.write_text(
-            json.dumps(_audit_payload(config, assembled, result), indent=2),
-            encoding="utf-8",
-        )
+        audit.update(_draft_audit(assembled, result))
 
         if result.status == "failed-stub":
             # Phase stays 'target': nothing was drafted, so the next run
             # must draft, not review.
+            _write_audit(config, session_id, audit, result.status)
             console.print(
                 f"[red]all routes exhausted[/red] — wrote failed-stub marker to "
                 f"{result.path}. Manifest untouched (stays planned); re-run with "
@@ -529,7 +561,6 @@ def run_session(
         if result.continuation_rounds:
             console.print(f"continuation rounds: {result.continuation_rounds}")
         console.print(f"chapter:  {result.path}")
-        console.print(f"audit:    {audit_path}")
 
     return _review(
         config,
@@ -537,6 +568,7 @@ def run_session(
         machine,
         providers,
         session_id=session_id,
+        audit=audit,
         console=console,
     )
 
