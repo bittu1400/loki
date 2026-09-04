@@ -240,7 +240,11 @@ ADR, never a shortcut. There are six.
   editorial pass never finished. `log/next-step.md` is what makes that
   chapter findable.
 - **Resuming is opt-in.** A bare re-run of an interrupted session refuses
-  and names the chapter, its phase, and `--resume` (decision #38).
+  and names the chapter, its phase, and `--resume` (decision #38). Phase
+  `target` is deliberately NOT gated: it is mid-flight having produced
+  nothing (a failed-stub run lands there), so the gate would send the
+  author to `--resume`, which then refuses for the stub and sends them to
+  `--force`. The exists check answers directly.
   `--force` abandons the session instead, through
   `SessionStateMachine.restart()` — the one write that skips
   `validate_transition`, because abandoning is not a transition.

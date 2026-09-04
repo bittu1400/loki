@@ -433,6 +433,13 @@ def run_session(
     # to 'written' and next_target() would skip straight past the chapter
     # whose editorial pass never finished.
     mid_flight = machine.phase != "complete"
+    # 'target' is mid-flight but has produced nothing: the session that
+    # recorded it never got a draft onto disk (an all-routes-exhausted run
+    # leaves the phase here). There is no work to resume, so the refusal
+    # below would send the author to --resume, which would then refuse for
+    # the stub on disk and point at --force. The exists check already gives
+    # that answer directly.
+    interrupted = machine.phase not in ("complete", "target")
     override = (
         chapter
         if chapter is not None
@@ -440,20 +447,29 @@ def run_session(
     )
     entry = resolve_target(config.manifest, override)
 
-    if resume and not mid_flight:
-        console.print(
-            "[red]nothing to resume[/red] the last session reached 'complete'. "
-            "Re-run without --resume to start the next chapter."
-        )
+    if resume and not interrupted:
+        if machine.phase == "target":
+            # An all-routes-exhausted run leaves the phase here with a
+            # stub on disk and nothing to continue.
+            console.print(
+                "[red]nothing to resume[/red] the recorded session never "
+                "produced a draft. Re-run without --resume; add --force if a "
+                "failed-stub chapter is still on disk."
+            )
+        else:
+            console.print(
+                "[red]nothing to resume[/red] the last session reached "
+                "'complete'. Re-run without --resume to start the next chapter."
+            )
         return 1
-    if mid_flight and entry.chapter_number != pointer.next_chapter:
+    if interrupted and entry.chapter_number != pointer.next_chapter:
         console.print(
             f"[red]refusing[/red] log/next-step.md records chapter "
             f"{pointer.next_chapter:03d} at phase '{machine.phase}'. Finish "
             f"that session before starting chapter {entry.chapter_number:03d}."
         )
         return 1
-    if mid_flight and not (resume or force):
+    if interrupted and not (resume or force):
         return _resume_refusal(console, book_slug, machine, entry)
 
     resuming = resume and machine.phase in DRAFT_DONE_PHASES

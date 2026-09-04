@@ -20,7 +20,7 @@ committing the session to the book's own git history. Three exit codes: 0
 complete, 1 nothing usable happened, 2 `editorial-pending` (prose on
 disk, canon deliberately untouched, resumable with `--resume`).
 
-**346 tests pass, ruff clean.**
+**348 tests pass, ruff clean.**
 
 **OQ-01 is resolved (decisions #40/#41, ADR-0013).** Every real book is
 its own git repository at `vault/<slug>/.git`, committed twice per
@@ -72,7 +72,7 @@ argued for (decision #39, ADR-0012, specs §17), and closed OQ-01 — the
 project's only 🔴, open since Session 5 (decisions #40/#41, ADR-0013,
 specs §18).
 
-**346 tests pass, ruff clean.**
+**348 tests pass, ruff clean.**
 
 ### Decisions taken before any code was written
 
@@ -275,12 +275,14 @@ someone to find out.
   ~10 minutes. The comparison against the only model that has ever caught
   a contradiction unaided is still missing, and if the lane stays dead
   that is a routing question rather than a blip.
-- **Snapshots are not exercised against a book that has one across two
-  sessions.** Tests cover init, both commits, the separation of author
-  edits from engine writes, and the no-git refusal; what no test covers
-  is the second session of a real book, where the repo already exists and
-  the author has edited between runs. The `.git`-walking bug found this
-  session was exactly that shape, which is a reason to look there first.
+- ~~Snapshots not exercised across two sessions~~ — **done before the
+  push.** A scratch book was run twice with a hand edit in between: four
+  commits, the author's line isolated in its own commit, the session
+  commits separate. That run also caught a UX wart worth having: after a
+  failed-stub run the pointer sits at `target`, and the resume gate was
+  sending the author to `--resume`, which then refused for the stub and
+  sent them to `--force`. `target` is now excluded from the gate (specs
+  §11) and two tests pin it.
 - **`new-book` does not initialise the repository.** The first
   `write-session` does, committing whatever exists as the baseline. Fine,
   and worth knowing before someone reports it as a bug.
@@ -1119,7 +1121,7 @@ src/novel_engine/templates/editorial-prompt.md  # engine-owned (decision #26).
                         #   beat, character_sheet, style_guide, style_evidence,
                         #   number_findings, entity_findings, chapter_text
 vault/example-book/     # fixture, unchanged
-tests/                  # 24 files, 346 tests
+tests/                  # 24 files, 348 tests
 ```
 
 Entry points (`pyproject.toml`) are unchanged: `new-book`,

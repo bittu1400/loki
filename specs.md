@@ -544,7 +544,12 @@ with `--force`, not promoted.
 - Re-running a session whose chapter already exists on disk **never
   overwrites it**. `--resume` continues from the recorded phase; without
   it the engine refuses, naming the chapter, its phase, and the flag
-  (decision #38). `--force` abandons the session instead: it re-enters
+  (decision #38). **`target` is excluded from that gate**: it is
+  mid-flight but has produced nothing — an all-routes-exhausted run
+  leaves the phase there with an ADR-0005 stub on disk — so the refusal
+  would point at `--resume`, which would then refuse for the stub and
+  point at `--force`. The existing-chapter check gives that answer
+  directly instead. `--force` abandons the session instead: it re-enters
   `target` through `SessionStateMachine.restart()` — not a transition,
   and the only write that skips `validate_transition` — after the typed
   confirmation that replacing prose already costs.
@@ -827,7 +832,7 @@ check-style --book <book-slug> --chapter N
 |---|---|
 | `--dry-run` | Assemble context, print the exact prompt, exit before any API call — and before providers are constructed. Also settable via `DRY_RUN=1`. Output is plain text (no rich markup) so it stays diffable. |
 | `--chapter N` | Override manifest target selection; must name an existing manifest row (`resolve_target`), never invents one. Refuses if chapter N already exists unless `--force`. |
-| `--resume` | Continue an interrupted session from its recorded phase. Required: without it, a run whose pointer records a mid-flight phase refuses and names the chapter, the phase, and this flag (decision #38). Never re-drafts — the prose on disk is not touched. Resuming at `styled` or `editorial-pending` spends an editorial call; resuming at `reconciled` spends nothing. |
+| `--resume` | Continue an interrupted session from its recorded phase. Required: without it, a run whose pointer records `drafted`, `styled`, `editorial-pending` or `reconciled` refuses and names the chapter, the phase, and this flag (decision #38). Never re-drafts — the prose on disk is not touched. Resuming at `styled` or `editorial-pending` spends an editorial call; resuming at `reconciled` spends nothing. |
 | `--force` | Permit replacing an existing chapter. Prints the destructive action and requires typing `replace`; with no TTY attached it refuses closed (non-interactive force arrives with the automation phase). |
 
 **Exit codes:** three outcomes, three codes (decision #37).

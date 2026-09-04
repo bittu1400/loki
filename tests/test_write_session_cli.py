@@ -649,3 +649,48 @@ def test_no_git_still_allows_a_drafting_only_session(book, monkeypatch) -> None:
     assert code == 0
     assert "no snapshots" in console_out.getvalue()
     assert (book / "example-book/chapters/chapter-003.md").exists()
+
+
+def test_rerun_after_a_failed_stub_names_force_not_resume(book) -> None:
+    """An all-routes-exhausted run leaves the phase at 'target' with a stub
+    on disk. Pointing the author at --resume would send them to a flag that
+    then refuses for the stub; --force is the answer, so say it first."""
+    dead = {
+        name: FakeProvider(RateLimited("down"))
+        for name in ("openrouter", "nvidia", "groq", "local")
+    }
+    assert (
+        run_session(
+            "example-book", book, FAKE_ENV, providers=dead, console=null_console()
+        )
+        == 1
+    )
+    assert pointer(book).last_session_phase == "target"
+
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=dead,
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 1
+    text = console_out.getvalue()
+    assert "--force" in text
+    assert "interrupted session" not in text
+
+
+def test_resume_at_target_says_there_is_nothing_to_continue(book) -> None:
+    park_at(book, "target")
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        resume=True,
+        providers=drafting_and_editorial(),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 1
+    assert "never produced a draft" in console_out.getvalue()
