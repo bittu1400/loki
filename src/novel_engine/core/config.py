@@ -221,6 +221,11 @@ def load_character_index(path: Path) -> dict[str, CharacterEntry]:
 
 def _check_filenames(book_root: Path) -> None:
     for dirpath, dirnames, filenames in os.walk(book_root):
+        # Prune hidden directories rather than only skipping their names:
+        # a book with its own snapshot repo (ADR-0013) carries a .git
+        # full of files like COMMIT_EDITMSG that are not book content and
+        # were never going to be kebab-case.
+        dirnames[:] = [name for name in dirnames if not name.startswith(".")]
         relative = Path(dirpath).relative_to(book_root)
         for name in [*dirnames, *filenames]:
             if name.startswith("."):

@@ -36,6 +36,7 @@ from novel_engine.core.errors import (
     VaultError,
 )
 from novel_engine.core.outline import ChapterEntry, parse_manifest, resolve_target
+from novel_engine.core.snapshot import ensure_repo, snapshot
 from novel_engine.core.state_machine import SessionStateMachine
 from novel_engine.core.vault import (
     chapter_path,
@@ -61,22 +62,29 @@ EXIT_EDITORIAL_PENDING = 2
 DRAFT_DONE_PHASES = frozenset({"drafted", "styled", "editorial-pending", "reconciled"})
 
 
-def _write_audit(
+def _end_session(
     config: BookConfig,
     session_id: str,
     audit: dict[str, object],
     final_phase: str,
 ) -> Path:
-    """specs §13: one record per invocation, written once at session end.
+    """Write the session record, then snapshot the vault (specs §13, §18).
 
-    At session end and not after drafting, because a session no longer
-    ends there: the phase this file records is the phase the run actually
-    reached, which is the same string the pointer carries.
+    The audit is written at session end and not after drafting, because a
+    session no longer ends there: the phase it records is the phase the
+    run actually reached, which is the same string the pointer carries.
+
+    The snapshot comes last so the commit contains the audit that
+    describes it, which makes `git -C vault/<slug> show` a complete
+    account of one session (ADR-0013).
     """
     audit["final_phase"] = final_phase
     path = config.root / "log" / "sessions" / f"{session_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(audit, indent=2, default=str), encoding="utf-8")
+
+    chapter = audit.get("chapter_number")
+    snapshot(config.root, f"session {session_id}: chapter {chapter} {final_phase}")
     return path
 
 
@@ -280,7 +288,7 @@ def _complete(
         # pointer. It is model text about what happens next, never canon.
         note=note,
     )
-    audit_path = _write_audit(config, session_id, audit, "complete")
+    audit_path = _end_session(config, session_id, audit, "complete")
     console.print(f"audit:    {audit_path}")
     console.print(
         f"[green]complete[/green] ch-{entry.chapter_number:03d} is "
@@ -361,7 +369,7 @@ def _review(
                 session_id=session_id,
                 status="editorial-pending",
             )
-            audit_path = _write_audit(config, session_id, audit, "editorial-pending")
+            audit_path = _end_session(config, session_id, audit, "editorial-pending")
             console.print(
                 f"[yellow]editorial-pending[/yellow] {refusal or result.reason}"
             )
@@ -492,6 +500,35 @@ def run_session(
         providers = build_providers(env)
 
     session_id = make_session_id()
+
+    # OQ-01 / ADR-0013: a session that writes canon needs somewhere to
+    # undo it from. Everything above this line is a refusal or a dry-run
+    # and has written nothing, so this is the last moment before the
+    # first write.
+    snapshots = ensure_repo(config.root)
+    if snapshots.active:
+        author_edits = snapshot(
+            config.root, f"author edits before session {session_id}"
+        )
+        if author_edits:
+            console.print(
+                f"[dim]snapshot {author_edits} — your edits since the last "
+                "session, committed before this one starts.[/dim]"
+            )
+    elif snapshots.externally_tracked:
+        console.print(f"[dim]snapshots: {snapshots.reason}[/dim]")
+    elif config.pipeline.editorial.enabled:
+        # Refusing is the whole point of OQ-01: canon writes with no
+        # recovery path are the failure this project must not ship.
+        console.print(f"[red]no recovery path[/red] {snapshots.reason}")
+        console.print("Nothing ran; no prose and no canon were touched.")
+        return 1
+    else:
+        console.print(
+            f"[yellow]no snapshots[/yellow] {snapshots.reason} Continuing "
+            "because editorial is disabled, so this session writes no canon."
+        )
+
     audit: dict[str, object] = {
         "session_id": session_id,
         "book_slug": config.slug,
@@ -499,6 +536,7 @@ def run_session(
         "pov": entry.pov,
         "beat": entry.beat,
         "resumed": resuming,
+        "snapshots": snapshots.active,
     }
 
     if resuming:
@@ -538,7 +576,7 @@ def run_session(
         if result.status == "failed-stub":
             # Phase stays 'target': nothing was drafted, so the next run
             # must draft, not review.
-            _write_audit(config, session_id, audit, result.status)
+            _end_session(config, session_id, audit, result.status)
             console.print(
                 f"[red]all routes exhausted[/red] — wrote failed-stub marker to "
                 f"{result.path}. Manifest untouched (stays planned); re-run with "

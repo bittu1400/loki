@@ -519,3 +519,133 @@ def test_pointer_disagreeing_with_disk_refuses(book) -> None:
     )
     assert code == 1
     assert "pointer disagrees with disk" in console_out.getvalue()
+
+
+# --- OQ-01: every session leaves a commit to go back to ----------------------
+
+
+def git_log(vault_root: Path) -> list[str]:
+    import subprocess
+
+    done = subprocess.run(
+        ["git", "-C", str(vault_root / "example-book"), "log", "--format=%s"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return [line for line in done.stdout.splitlines() if line]
+
+
+def test_session_leaves_a_baseline_and_a_session_commit(book) -> None:
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(),
+        console=null_console(),
+    )
+    assert code == 0
+
+    log = git_log(book)
+    assert len(log) == 2
+    assert log[0].endswith("chapter 3 complete")
+    assert log[1].startswith("author edits before session")
+
+
+def test_author_edits_are_committed_separately_from_engine_writes(book) -> None:
+    """Undoing a session must not also undo the author's morning."""
+    import subprocess
+
+    tracker = book / "example-book/canon/continuity-tracker.md"
+    tracker.write_text(
+        tracker.read_text() + "\nAn author note added by hand.\n", encoding="utf-8"
+    )
+
+    run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(),
+        console=null_console(),
+    )
+
+    # One commit back is the state the session started from: the author's
+    # note present, the session's canon line absent.
+    before = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(book / "example-book"),
+            "show",
+            "HEAD~1:canon/continuity-tracker.md",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout
+    assert "An author note added by hand." in before
+    assert "Ovist counts driftglass by weight." not in before
+    assert "Ovist counts driftglass by weight." in tracker.read_text()
+
+
+def test_editorial_pending_session_is_still_snapshotted(book) -> None:
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=full_providers(
+            openrouter=FakeProvider(Success(text_of(45), "m3", 60, 5, 100)),
+            gemini=FakeProvider(RateLimited("editor down")),
+            mistral=FakeProvider(RateLimited("editor down")),
+        ),
+        console=null_console(),
+    )
+    assert code == 2
+    assert git_log(book)[0].endswith("chapter 3 editorial-pending")
+
+
+def test_no_git_refuses_a_canon_writing_session(book, monkeypatch) -> None:
+    """OQ-01 in one test: no recovery path, no canon."""
+    import novel_engine.core.snapshot as snapshot_module
+
+    def no_git(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(snapshot_module.subprocess, "run", no_git)
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 1
+    assert "no recovery path" in console_out.getvalue()
+    assert not (book / "example-book/chapters/chapter-003.md").exists()
+
+
+def test_no_git_still_allows_a_drafting_only_session(book, monkeypatch) -> None:
+    """editorial.enabled: false writes no canon, so it needs no undo."""
+    import novel_engine.core.snapshot as snapshot_module
+
+    pipeline_path = book / "example-book/config/pipeline.yaml"
+    pipeline_path.write_text(
+        pipeline_path.read_text().replace("enabled: true", "enabled: false")
+    )
+    monkeypatch.setattr(
+        snapshot_module.subprocess,
+        "run",
+        lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("git")),
+    )
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 0
+    assert "no snapshots" in console_out.getvalue()
+    assert (book / "example-book/chapters/chapter-003.md").exists()

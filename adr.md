@@ -932,3 +932,93 @@ the number check, and its findings go into the prompt as evidence.**
   already produced the evidence, and leaving a measured, cheap, quota-free
   fix unbuilt while the pass silently missed the class is the failure
   mode pitfall A6 describes.
+
+---
+
+## ADR-0013 — Every real book is its own git repository
+
+**Date:** 2026-09-04 · **Status:** accepted · **Session:** 10
+**Resolves:** OQ-01 · **Amends:** ADR-0004 · **Closes:** threat-model T2
+
+### Context
+
+ADR-0004 gitignores real manuscripts. That was right for privacy and it
+removed something nobody costed at the time: several safeguards in this
+design assume git history can recover a corrupted continuity tracker. For
+`vault/example-book/` that is true. For a real book there was no history,
+no diff, and no undo — a bad delta, an errant `--force`, or a disk
+failure was unrecoverable.
+
+OQ-01 has been the project's only 🔴 since Session 5, and its blast
+radius widened in Session 10 without anyone choosing to widen it: through
+Phase 5 it blocked library modules nothing could invoke, and once
+`write-session` gained the editorial pass it blocked the main command
+against any real book.
+
+### Decision
+
+1. **`vault/<slug>/` is its own git repository**, created on demand at
+   the first session that would write. It is nested inside the outer repo
+   and invisible to it, because everything under `vault/` except the
+   fixture is already gitignored.
+2. **Two commits per session.** `author edits before session <id>` runs
+   before the first write; `session <id>: chapter NNN <phase>` runs after
+   the audit is written, so one commit is a complete account of one
+   session. Two rather than one because a single commit mixes the
+   author's own edits into the engine's, and then "undo that session"
+   also undoes their morning.
+3. **No restore command.** The engine only ever runs `git add` and
+   `git commit`, which write nothing outside `.git`. Recovery is
+   `git -C vault/<slug> log`, `show`, `checkout HEAD~1` — plain git,
+   which does it better than a wrapper would.
+4. **No remote, ever.** Nothing is configured and nothing is pushed.
+5. **A book already tracked by an enclosing repository is skipped.**
+   `vault/example-book/` is committed to this repo, which is already its
+   history; a nested repo would be a second history of the same bytes.
+6. **No recovery path plus canon writes is a refusal** (decision #41).
+   If git is unavailable, a session with `editorial.enabled: true` exits
+   1 before writing anything. With editorial disabled it warns and
+   continues, because that configuration appends no canon and its chapter
+   write is create-only.
+
+### Consequences
+
+- **Positive:** OQ-01 is closed and T2's residual risk drops from High to
+  Low. A real book can now be run against, which is the first time that
+  has been true.
+- **Positive:** the two-commit shape makes the author's edits and the
+  engine's writes separately revertible, which is what the
+  `generated_hash` author-edit signal (decision #25) was always pointing
+  at.
+- **Positive:** every session's audit JSON is inside the commit that
+  describes that session.
+- **Negative:** a `.git` directory now lives inside a book. It surfaced
+  one real bug immediately — `_check_filenames` walked into it and
+  rejected `COMMIT_EDITMSG` as not kebab-case, which would have made a
+  real book fail to load on its *second* session. Hidden directories are
+  now pruned from that walk.
+- **Negative:** the engine runs a subprocess it does not control. A git
+  failure mid-session leaves the working tree correct and the history
+  incomplete; the session still succeeds, and the next one commits both.
+- **Residual:** this is local history on one disk. It is not an off-machine
+  backup, and a disk failure still loses the book. Saying otherwise would
+  be the same overclaim OQ-10 keeps warning about.
+- **Residual:** `new-book` does not initialise the repo; the first
+  `write-session` does. A book hand-written for weeks before its first
+  session gets all of it as one baseline commit.
+
+### Alternatives considered
+
+- **Timestamped snapshot directories.** Simplest to write, no diffs, no
+  messages, grows without bound, needs manual pruning.
+- **A private remote vault repo.** Adds off-machine backup, and puts the
+  manuscript on someone else's servers — the exact trade ADR-0004
+  refused.
+- **Rely on the author's existing backup scheme.** Zero work, unverified,
+  no per-session granularity, and the failure mode is discovered at the
+  worst possible moment.
+- **One commit per session.** Rejected under decision #40: it welds the
+  author's edits to the engine's and destroys the property that makes the
+  history worth having.
+- **A `--restore` command.** Rejected under decision #40: it is invariant
+  5 with extra steps, and plain git is better at it.
