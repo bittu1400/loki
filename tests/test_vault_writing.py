@@ -12,6 +12,7 @@ from novel_engine.core.errors import ConfigError, VaultError
 from novel_engine.core.outline import parse_manifest, resolve_target
 from novel_engine.core.vault import (
     chapter_path,
+    flip_chapter_status,
     flip_manifest_status,
     generated_hash,
     split_chapter_file,
@@ -194,3 +195,64 @@ def test_flip_preserves_prose_outside_markers(book_root: Path) -> None:
     flip_manifest_status(book_root, 3, "written")
     after = read_outline(book_root)
     assert after.split("<!-- MANIFEST:BEGIN -->")[0] == pre_section
+
+
+# --- flip_chapter_status ------------------------------------------------------
+
+
+def test_flip_chapter_status_promotes_a_draft(book_root: Path) -> None:
+    write_chapter(book_root, 3, {"chapter_number": 3, "status": "draft"}, "Prose.")
+    flip_chapter_status(book_root, 3, "pending-review", expected_current="draft")
+    fields, _ = split_chapter_file(
+        chapter_path(book_root, 3).read_text(encoding="utf-8")
+    )
+    assert fields["status"] == "pending-review"
+
+
+def test_flip_chapter_status_leaves_body_and_hash_alone(book_root: Path) -> None:
+    """The whole reason a status flip is safe: generated_hash covers the
+    body only, so promoting a chapter cannot disturb the author-edit
+    signal (decision #25, pitfalls B5)."""
+    write_chapter(book_root, 3, {"chapter_number": 3, "status": "draft"}, "Prose.")
+    path = chapter_path(book_root, 3)
+    before_fields, before_body = split_chapter_file(path.read_text(encoding="utf-8"))
+
+    flip_chapter_status(book_root, 3, "pending-review")
+
+    after_fields, after_body = split_chapter_file(path.read_text(encoding="utf-8"))
+    assert after_body == before_body
+    assert after_fields["generated_hash"] == before_fields["generated_hash"]
+    assert after_fields["generated_hash"] == generated_hash(after_body)
+
+
+def test_flip_chapter_status_preserves_hand_written_quoting(book_root: Path) -> None:
+    """Fixture chapters quote their scalars; the flip must not restyle the
+    file it is editing one cell of."""
+    path = chapter_path(book_root, 1)
+    original = path.read_text(encoding="utf-8")
+    assert 'status: "pending-review"' in original
+
+    flip_chapter_status(book_root, 1, "draft", expected_current="pending-review")
+    assert 'status: "draft"' in path.read_text(encoding="utf-8")
+
+
+def test_flip_chapter_status_is_a_no_op_when_already_set(book_root: Path) -> None:
+    path = chapter_path(book_root, 1)
+    before = path.read_text(encoding="utf-8")
+    flip_chapter_status(book_root, 1, "pending-review")
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_flip_chapter_status_refuses_wrong_expected_current(book_root: Path) -> None:
+    with pytest.raises(VaultError, match="expected 'draft'"):
+        flip_chapter_status(book_root, 1, "pending-review", expected_current="draft")
+
+
+def test_flip_chapter_status_refuses_illegal_status(book_root: Path) -> None:
+    with pytest.raises(VaultError, match="Illegal chapter status"):
+        flip_chapter_status(book_root, 1, "published")
+
+
+def test_flip_chapter_status_refuses_missing_chapter(book_root: Path) -> None:
+    with pytest.raises(VaultError, match="does not exist"):
+        flip_chapter_status(book_root, 42, "pending-review")

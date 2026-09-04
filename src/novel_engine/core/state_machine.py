@@ -165,7 +165,11 @@ LEGAL_TRANSITIONS: dict[SessionPhase, frozenset[SessionPhase]] = {
     "complete": frozenset({"target"}),
     "target": frozenset({"target", "drafted"}),
     "drafted": frozenset({"styled"}),
-    "styled": frozenset({"editorial-pending", "reconciled"}),
+    # styled -> complete is the editorial-disabled escape (decision #36):
+    # the only route to `complete` that writes no canon. Without it a book
+    # with `editorial.enabled: false` parks its pointer at `styled` and
+    # every later run resumes the same chapter forever.
+    "styled": frozenset({"editorial-pending", "reconciled", "complete"}),
     "editorial-pending": frozenset({"editorial-pending", "reconciled"}),
     "reconciled": frozenset({"complete"}),
 }
@@ -278,6 +282,29 @@ class SessionStateMachine:
             note=note,
             blocked=blocked,
             blocked_reason=blocked_reason,
+        )
+        write_next_step(self.book_root, new_step)
+        self.current = new_step
+        return self.current
+
+    def restart(self, *, chapter: int, pov: str, session_id: str) -> NextStep:
+        """Abandon an interrupted session and re-enter `target` for a chapter.
+
+        The one write that does not validate a transition, because it is not
+        one: it is the author saying "throw this session away" through
+        `--force`, which already costs a typed confirmation at the CLI and
+        replaces the prose itself (decision #38, invariant 5). The automatic
+        path never calls it.
+        """
+        from novel_engine.core.vault import write_next_step
+
+        new_step = NextStep(
+            next_chapter=chapter,
+            next_pov=pov,
+            last_session_id=session_id,
+            last_session_phase="target",
+            last_session_status="restarted",
+            note=self.current.note,
         )
         write_next_step(self.book_root, new_step)
         self.current = new_step

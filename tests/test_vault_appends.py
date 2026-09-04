@@ -264,4 +264,5 @@ def test_vault_exposes_no_general_canon_writer() -> None:
         "append_deepen_question",
         "flip_manifest_status",
         "flip_thread_status",
+        "flip_chapter_status",
     }

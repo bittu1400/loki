@@ -176,6 +176,81 @@ def write_chapter(
     return path
 
 
+#: Chapter frontmatter statuses this engine may write. specs §11 also
+#: defines `approved` and `published`; neither is reachable in v1
+#: (ADR-0001), so neither is legal here yet. `failed-stub` is written by
+#: write_chapter at creation and is never flipped — a stub is replaced
+#: with --force, not promoted.
+LEGAL_CHAPTER_STATUSES = frozenset({"draft", "pending-review"})
+
+_STATUS_LINE = re.compile(
+    r"^(?P<lead>status:[ \t]*)(?P<quote>[\"']?)(?P<value>[^\"'\n]*)(?P=quote)"
+    r"(?P<trail>[ \t]*)$",
+    re.MULTILINE,
+)
+
+
+def flip_chapter_status(
+    book_root: Path,
+    chapter_number: int,
+    new_status: str,
+    expected_current: str | None = None,
+) -> None:
+    """The single permitted mechanical edit to a chapter file (specs §3).
+
+    Rewrites exactly one frontmatter cell — `status` — and nothing else.
+    The BODY is never touched, which is why `generated_hash` survives:
+    it hashes post-frontmatter bytes only, so a status flip cannot
+    disturb the author-edit signal (decision #25, pitfalls B5).
+
+    Fails closed: unknown chapter, illegal status, missing status key, or
+    a current value that does not match `expected_current` aborts before
+    any write.
+    """
+    if new_status not in LEGAL_CHAPTER_STATUSES:
+        legal = ", ".join(sorted(LEGAL_CHAPTER_STATUSES))
+        raise VaultError(f"Illegal chapter status {new_status!r}; legal: {legal}.")
+
+    path = chapter_path(book_root, chapter_number)
+    if not path.is_file():
+        raise VaultError(f"Cannot flip status: {path} does not exist.")
+
+    text = path.read_text(encoding="utf-8")
+    fields, body_before = split_chapter_file(text)
+    current = fields.get("status")
+    if current is None:
+        raise VaultError(f"{path} has no status key in its frontmatter.")
+    if expected_current is not None and current != expected_current:
+        raise VaultError(
+            f"{path} status is {current!r}, expected {expected_current!r}; "
+            "refusing to flip."
+        )
+    if current == new_status:
+        return
+
+    end = text.find("\n---", 4)
+    frontmatter, rest = text[:end], text[end:]
+    replaced, count = _STATUS_LINE.subn(
+        lambda m: f"{m['lead']}{m['quote']}{new_status}{m['quote']}{m['trail']}",
+        frontmatter,
+        count=1,
+    )
+    if count != 1:
+        raise VaultError(
+            f"{path} frontmatter has no single editable status line; refusing to guess."
+        )
+    path.write_text(replaced + rest, encoding="utf-8")
+
+    verified_fields, verified_body = split_chapter_file(
+        path.read_text(encoding="utf-8")
+    )
+    if verified_fields.get("status") != new_status or verified_body != body_before:
+        raise VaultError(
+            f"Post-write verification failed for {path}: status flip did not "
+            "land cleanly, or the body changed."
+        )
+
+
 # --- manifest ---------------------------------------------------------------
 
 

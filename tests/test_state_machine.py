@@ -221,3 +221,35 @@ def test_mark_blocked_and_unblock(book_root: Path) -> None:
     # Now transition succeeds
     sm.transition("target", session_id="sess-2")
     assert sm.phase == "target"
+
+
+def test_styled_can_reach_complete_directly(book_root: Path) -> None:
+    """Decision #36: the editorial-disabled escape. Without it a book with
+    `editorial.enabled: false` parks at 'styled' and resumes forever."""
+    validate_transition("styled", "complete")
+    assert "complete" in LEGAL_TRANSITIONS["styled"]
+
+
+def test_restart_reenters_target_from_any_mid_flight_phase(book_root: Path) -> None:
+    """--force abandons the session that produced the prose (decision #38).
+    It is the one write that is not a transition, so it must work from the
+    phases validate_transition would refuse."""
+    for phase in ("drafted", "styled", "editorial-pending", "reconciled"):
+        machine = SessionStateMachine(
+            book_root,
+            NextStep(
+                next_chapter=3,
+                next_pov="ovist-rhoam",
+                last_session_phase=phase,
+                note="kept",
+            ),
+        )
+        with pytest.raises(StateMachineError):
+            validate_transition(phase, "target")
+
+        machine.restart(chapter=3, pov="ovist-rhoam", session_id="sess-1")
+
+        assert machine.phase == "target"
+        assert read_next_step(book_root).last_session_phase == "target"
+        assert read_next_step(book_root).last_session_status == "restarted"
+        assert machine.current.note == "kept"
