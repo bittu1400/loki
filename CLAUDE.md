@@ -113,7 +113,9 @@ ADR, never a shortcut. There are six.
    retry storm that looks like a network problem.
 4. **`.env` is never committed. Logs redact by allowlist, not blocklist.**
 5. **The engine never overwrites author-written prose** without `--force`
-   and explicit confirmation.
+   and explicit confirmation. Prose is the subject: the two mechanical
+   cell edits (`flip_manifest_status`, `flip_chapter_status`) rewrite one
+   cell each, byte-verify everything else, and never touch a body.
 6. **A chapter that contradicts locked canon is not reconcilable.** A
    delta carrying a `critical` continuity violation is refused whole
    (ADR-0009). Added Session 8, after a live pass flagged a contradiction
@@ -127,9 +129,11 @@ ADR, never a shortcut. There are six.
 - **`core/vault.py` is the only module that writes to disk.** Everything
   else returns data. This is what makes the authority model reviewable.
 - **`vault.py` exposes narrowly-scoped primitives only** — as of Phase 6:
-  `scaffold_book`, `write_chapter` (create-only, hash-verified),
-  `flip_manifest_status` (single-cell mechanical edit), five canon
-  appends: `append_fact`, `append_thread`, `append_deepen_question`,
+  `scaffold_book`, `write_chapter` (create-only, hash-verified), two
+  single-cell mechanical edits — `flip_manifest_status` (one manifest
+  row's status) and `flip_chapter_status` (one chapter's frontmatter
+  `status`, never the body, so `generated_hash` is untouched) — five
+  canon appends: `append_fact`, `append_thread`, `append_deepen_question`,
   `append_summary`, `flip_thread_status`, and one overwrite primitive:
   `write_next_step` (`log/next-step.md` pointer, specs §8, ADR-0010).
   **Each verifies its own write by re-parsing the file**, not by
@@ -200,16 +204,28 @@ ADR, never a shortcut. There are six.
 - **Real vault content is gitignored** (ADR-0004). All development touching
   destructive paths runs against the committed `vault/example-book/`
   fixture.
-- **Phase 5 is built, and still blocked against real vaults** until
-  OQ-01 resolves the missing backup path. It runs against
-  `vault/example-book/`, which git can restore. `canon_transaction` is
-  NOT the resolution of OQ-01: it recovers one interrupted apply, not a
-  session an author wants to undo tomorrow.
-- **Nothing invokes the editorial pass from a CLI.** `pass_runner` and
-  `reconciler` are tested library code with no entry point, deliberately:
-  wiring them into `write-session` is Phase 6, and doing it sooner hands
-  the engine the ability to write canon on a real vault while OQ-01 is
-  open.
+- **`write-session` writes canon now, and OQ-01 blocks the whole command
+  against a real vault** — not just the editorial modules, as it did
+  through Phase 5. It runs against `vault/example-book/`, which git can
+  restore. `canon_transaction` is NOT the resolution of OQ-01: it
+  recovers one interrupted apply, not a session an author wants to undo
+  tomorrow. The one safe shape for a real book today is
+  `editorial.enabled: false`, which drafts and takes the `styled ->
+  complete` edge without touching canon (decision #36).
+- **The session pointer owns the target whenever a session is
+  mid-flight**, not the manifest. Drafting flips the manifest row to
+  `written`, so `next_target()` would skip straight past a chapter whose
+  editorial pass never finished. `log/next-step.md` is what makes that
+  chapter findable.
+- **Resuming is opt-in.** A bare re-run of an interrupted session refuses
+  and names the chapter, its phase, and `--resume` (decision #38).
+  `--force` abandons the session instead, through
+  `SessionStateMachine.restart()` — the one write that skips
+  `validate_transition`, because abandoning is not a transition.
+- **Exit 2 means editorial-pending**: prose on disk, canon deliberately
+  untouched, resumable. 0 is `complete`, 1 is "nothing usable happened"
+  (decision #37). A caller that treats 2 as failure will re-draft a
+  chapter that already exists.
 - **Reasoning/thinking stays OFF for drafting.** Measured 2026-08-31: 2x
   tokens, 2x wall time, worse prose, and the only draft that broke the
   fourth wall (pitfalls C8/C9). A local GGUF's chat template — not our
@@ -227,7 +243,8 @@ uv run ruff format .
 uv add <package>              # never pip install
 
 uv run write-session --book <slug> --dry-run   # assemble prompt, spend nothing
-uv run write-session --book <slug>
+uv run write-session --book <slug>             # full lifecycle; 0/1/2
+uv run write-session --book <slug> --resume    # continue from the recorded phase
 uv run new-book --slug <slug>
 uv run check-style --book <slug> --chapter N
 ```
@@ -236,12 +253,17 @@ uv run check-style --book <slug> --chapter N
 are the hardest constraint in the project; assembling and reading a prompt
 costs nothing, generating costs a call.
 
-**There is no editorial command.** `editorial/pass_runner.py` and
-`editorial/reconciler.py` are tested library code with no entry point;
-Phase 6 wires them into `write-session`. Until then, exercising them
-means a throwaway script against a temp copy of the fixture — see
-progress.md's next-session section for the shape of one. The free half
-of the continuity check needs no key and no script:
+**There is no separate editorial command and there should not be one.**
+`write-session` runs the pass as one phase of the lifecycle — the only
+context where a delta has a chapter, a phase, and a pointer to record
+itself against:
+
+```bash
+uv run write-session --book <slug>            # target -> ... -> complete
+uv run write-session --book <slug> --resume   # continue an interrupted one
+```
+
+The free half of the continuity check still needs no key and no call:
 `find_number_conflicts(parse_facts(tracker_text), chapter_body)`.
 
 ---

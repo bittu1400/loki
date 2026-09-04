@@ -115,6 +115,12 @@ caught the same case on both subsequent runs. Never describe the
 violation list as a guarantee; it is proven for bare number
 disagreements and unproven for everything else (OQ-10).
 
+**Where that lands in the product (2026-09-04).** `write-session` prints
+the caveat next to every result, including the empty one: "none
+reported... an empty list is not proof of a clean chapter". The wording
+is load-bearing, not decoration — this pitfall is about a session log
+that reads like success, and the CLI is where an author reads it.
+
 ### 🔴 A7 — The editorial pass proposing the contradiction as canon
 
 **The trap.** The delta that reports a contradiction also proposes new

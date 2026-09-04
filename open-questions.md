@@ -16,7 +16,11 @@ record of what was once uncertain is useful.
 
 ## 🔴 OQ-01 — What replaces git as the recovery path for real vault content?
 
-**Blocks:** Phase 5 (editorial delta pass) against any real vault.
+**Blocks:** running `write-session` against any real vault at all —
+widened 2026-09-04. Until Session 10 this blocked the Phase 5 library
+code, which nothing invoked; now `write-session` runs the editorial pass
+and the reconciler as part of every session, so the blocked surface is
+the main command rather than an unreachable module.
 **Referenced by:** [ADR-0004](adr.md#adr-0004--vault-location-and-what-gets-committed),
 [threat-model.md](threat-model.md) T2.
 
@@ -47,8 +51,17 @@ vault content without committing it to this repository? Not about privacy
 property ADR-0004 removed, costs almost nothing, and changes nothing about
 privacy.
 
-**Until resolved:** all Phase 5 development and testing runs against
-`vault/example-book/` only.
+**Until resolved:** all development and testing runs against
+`vault/example-book/` only, which git can restore.
+
+**One partial mitigation exists (2026-09-04).** `editorial.enabled: false`
+in a book's `pipeline.yaml` runs drafting and the style checks and takes
+the `styled -> complete` edge, writing no canon at all (decision #36).
+That makes a real book *draftable* today. It is not a resolution: it buys
+safety by switching off the continuity layer, and the moment the author
+wants that layer on, this question is load-bearing again.
+`canon_transaction` is not the resolution either — it recovers one
+interrupted apply, not a session the author wants to undo tomorrow.
 
 ---
 
@@ -350,10 +363,13 @@ assumed.
 `gemini-3.5-flash-lite` → `mistral-medium-latest` (decision #31). One
 measured data point on cost: a full editorial pass over a ~1500-word
 chapter cost 3708 input / 476 output tokens on flash-lite and 3457 /
-1091 on mistral-medium. Nothing has hit a quota ceiling yet because
-nothing runs the pass automatically — that starts in Phase 6, which is
-when this question becomes answerable with real numbers instead of
-guesses.
+1091 on mistral-medium. Nothing has hit a quota ceiling yet.
+Phase 6 Session 10 wired the pass into `write-session`, so every real
+session now spends an editorial call — but no real book exists to run
+them against (OQ-01), so the numbers that would answer this question
+still do not exist. What did change: `editorial.enabled: false` is now a
+working per-book switch, which is the crudest possible version of the
+cadence knob this question recommends.
 
 **Scope.** Only the cadence of the LLM editorial pass. Deterministic style
 checks are free and always run every chapter.
@@ -451,6 +467,13 @@ copy of a fixture chapter — a name is cheapest to author and the hardest
 for a regex — and run both editors on it. Two calls, one session, and it
 decides whether the answer is "the model is fine, the prompt was the
 problem" or "extend the deterministic layer to entity names next".
+
+**Carried into the CLI (2026-09-04).** `write-session` now prints the
+violation list on every reconciled chapter, and prints the caveat with
+it: an empty list means nothing was reported, not that the chapter is
+clean. That wording is load-bearing while this question is open — the
+one thing the pipeline must never do is make "no violations" read as a
+guarantee (pitfall A6).
 
 **Until resolved:** do not describe the editorial pass as a continuity
 guarantee. It reliably proposes facts, writes summaries, surfaces

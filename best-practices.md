@@ -246,7 +246,12 @@ to be broken, that is an ADR, not a shortcut.
    transient, and model-unavailable outcomes are eligible.
 4. **`.env` is never committed.** Logs redact by allowlist.
 5. **The engine never overwrites author-written prose without `--force`
-   and confirmation.**
+   and confirmation.** Prose is the invariant's subject, and the two
+   mechanical frontmatter/manifest cell edits are not prose:
+   `flip_manifest_status` and `flip_chapter_status` rewrite one cell,
+   byte-verify the rest, and never touch a body (decisions #16, #35).
+   `generated_hash` covers post-frontmatter bytes only, which is what
+   makes the second one safe to run on a chapter the author has edited.
 6. **A chapter that contradicts locked canon is not reconcilable.** A
    delta carrying a `critical` continuity violation is refused whole —
    the author fixes the prose or demotes the fact first

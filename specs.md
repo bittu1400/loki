@@ -165,10 +165,14 @@ The copper conduits hummed against Kaelen's teeth…
     (001, 002) have a `title` key because a human put it there. Lifting
     it out of the heading into frontmatter is Phase 6 work at the
     earliest, and is cosmetic — nothing reads it.
-  - **The engine writes `status: draft`.** `pending-review` is the value
-    a completed session is supposed to set at the end (architecture §4
-    step 11), and nothing sets it yet — that arrives with the Phase 6
-    state machine.
+  - **The engine writes `status: draft`**, and a session that reaches
+    `complete` flips it to `pending-review` through
+    `vault.flip_chapter_status` (decision #35, Phase 6 Session 10). That
+    flip rewrites one frontmatter cell and never the body, so
+    `generated_hash` — which covers post-frontmatter bytes only — is
+    unaffected and a hand-edited chapter stays detectably hand-edited.
+    A chapter left at `draft` with a mid-flight pointer is an interrupted
+    session, and that difference is now readable off the file.
 - `status` values and legal transitions are defined in §11.
 - Frontmatter is flat and scalar-only for Notion compatibility (§1).
 - Failed sessions (ADR-0005) use status `failed-stub`, `actual_words: 0`,
@@ -442,12 +446,14 @@ auto_publish: false
 **What the code actually reads (2026-09-01).** `target_words`,
 `word_tolerance`, `max_continuation_rounds`, every `context.*` key, every
 `retry.*` key, and `editorial.max_repair_attempts` are all live.
-`editorial.enabled` and `editorial.fail_closed` are **parsed and
-validated but not yet consulted**: nothing calls the editorial pass
-automatically until Phase 6 wires it into a session, and `fail_closed`
-has no false branch — failing closed is invariant 2, not a preference, so
-the key exists to make that explicit in the file rather than to switch it
-off. `auto_publish` is deferred (ADR-0001). A key that is declared and
+`editorial.enabled` is **live as of Phase 6 Session 10**: `false` runs
+drafting and the style checks, skips the editorial call entirely, and
+takes the `styled -> complete` edge, which is the only route to
+`complete` that writes no canon (decision #36). It is the configuration a
+real vault can run while OQ-01 is open. `editorial.fail_closed` is still
+**parsed and validated but not consulted**, and has no false branch —
+failing closed is invariant 2, not a preference, so the key exists to
+make that explicit in the file rather than to switch it off. `auto_publish` is deferred (ADR-0001). A key that is declared and
 unread is a documented state here, never a silent one.
 
 **Why two config files.** `prompt.md` places `auto_publish` inside
@@ -485,6 +491,10 @@ as OQ-03.
       ┌──────────┐
       │ complete │  chapter status = pending-review
       └──────────┘
+
+   styled ──────────────────────────────────► complete
+        editorial.enabled: false only (decision #36).
+        The one route to complete that writes no canon.
 ```
 
 **Chapter status** (frontmatter): `draft` → `pending-review` → `approved` →
@@ -496,8 +506,8 @@ as OQ-03.
   next phase begins. A crash between phases is therefore always resumable.
   *(Phase 6 Session 9: `core/state_machine.py` defines `LEGAL_TRANSITIONS`,
   `validate_transition()`, and `SessionStateMachine.transition()`, which writes
-  and verifies each phase pointer before the subsequent phase runs.
-  Batch 3 resume orchestration and Batch 4 CLI integration are in progress.)*
+  and verifies each phase pointer before the subsequent phase runs. Session 10
+  wired the whole lifecycle into `cli/write_session.py`, Batches 3 & 4.)*
 - `editorial-pending` is reachable three ways, all of them leaving canon
   untouched: no editor route answered, the response never validated
   within `max_repair_attempts`, or the delta validated and reported a
@@ -506,8 +516,16 @@ as OQ-03.
   pipeline working — and the CLI must say so differently from the other
   two.
 - Re-running a session whose chapter already exists on disk **never
-  overwrites it**. The engine resumes from the recorded phase, or refuses
-  with a precise message naming the chapter and its current phase.
+  overwrites it**. `--resume` continues from the recorded phase; without
+  it the engine refuses, naming the chapter, its phase, and the flag
+  (decision #38). `--force` abandons the session instead: it re-enters
+  `target` through `SessionStateMachine.restart()` — not a transition,
+  and the only write that skips `validate_transition` — after the typed
+  confirmation that replacing prose already costs.
+- **Whichever phase a mid-flight pointer records, that pointer owns the
+  target chapter, not the manifest.** Drafting flips the manifest row to
+  `written`, so `next_target()` would skip straight past a chapter whose
+  review never finished.
 - Chapter numbers are allocated from the manifest, never from
   `len(listdir(chapters/))`. A gap in the chapter files must not silently
   shift numbering.
@@ -662,7 +680,8 @@ restores every one of them.
 | `deepen_questions[]` | `canon/deepen-queue.md` | `append_deepen_question` |
 | `suggested_canon_patches[]` | `log/sessions/<id>-patches.md` | plain text, written only after the canon change succeeded |
 | `continuity_violations[]` | **nothing** — but a `critical` one refuses the whole delta | — |
-| `next_step_note`, `beat_adherence` | not yet written anywhere (Phase 6: `log/next-step.md` and the audit record) | — |
+| `next_step_note` | the prose note under `log/next-step.md`'s frontmatter, on `complete` | `write_next_step` (via `SessionStateMachine.transition`) |
+| `beat_adherence` | the session audit only, inside the raw delta | — |
 
 The summary is applied first deliberately: it is the append most likely
 to be refused (one paragraph per chapter, in chapter order), so
@@ -683,14 +702,23 @@ editorial delta; and the final phase reached.
 Retry and backoff logging is the classic place an API key leaks; the logger
 redacts by allowlist, not by blocklist.
 
-**Status (2026-09-01).** `cli/write_session.py` writes session id, book
-slug, chapter number, POV, beat, final phase, assigned/actual model,
-fallback flag, continuation rounds, token totals, and one record per call
-attempt. **Style-check metric values and the raw validated delta are NOT
-yet recorded** — both belong to a session that runs the editorial pass,
-and nothing does until Phase 6. When they are added, the delta is the
-only place a `progressed` thread note ever reaches the author, so it is
-not optional.
+**Status (2026-09-04).** Complete as specified. `cli/write_session.py`
+writes one record per invocation at session end: session id, book slug,
+chapter number, POV, beat, whether the run was a resume, the final phase
+reached, the drafting model/fallback/continuation/token fields with one
+record per call attempt, `style_metrics` (every value `quality/metrics.py`
+computes) with the list of flagged metric names, and an `editorial` block
+carrying the pass status, repair rounds, models, tokens, its own call
+records, the **raw validated delta**, and what the reconciler actually
+appended.
+
+Two consequences worth knowing. `final_phase` is the phase the run
+reached — `complete`, `editorial-pending`, or `failed-stub` — and always
+matches what `log/next-step.md` records. And the raw delta is the only
+place a `progressed` thread note ever reaches the author (§12), which is
+why it is not optional. A resumed run writes its own audit under its own
+session id, with no drafting fields and `resumed: true`; the drafting
+half stays in the audit of the run that drafted.
 
 ---
 
@@ -773,14 +801,16 @@ check-style --book <book-slug> --chapter N
 |---|---|
 | `--dry-run` | Assemble context, print the exact prompt, exit before any API call — and before providers are constructed. Also settable via `DRY_RUN=1`. Output is plain text (no rich markup) so it stays diffable. |
 | `--chapter N` | Override manifest target selection; must name an existing manifest row (`resolve_target`), never invents one. Refuses if chapter N already exists unless `--force`. |
-| `--resume` | Continue an interrupted session from its recorded phase. *(Phase 6 — not yet implemented.)* |
+| `--resume` | Continue an interrupted session from its recorded phase. Required: without it, a run whose pointer records a mid-flight phase refuses and names the chapter, the phase, and this flag (decision #38). Never re-drafts — the prose on disk is not touched. Resuming at `styled` or `editorial-pending` spends an editorial call; resuming at `reconciled` spends nothing. |
 | `--force` | Permit replacing an existing chapter. Prints the destructive action and requires typing `replace`; with no TTY attached it refuses closed (non-interactive force arrives with the automation phase). |
 
-**Exit codes:** 0 on a drafted chapter or dry-run; 1 on refusals
-(existing chapter without force, failed confirmation) and on an
-all-routes-exhausted session (whose ADR-0005 stub and audit JSON are
-still written first). Config/validation errors exit 1 via the shared
-error handler.
+**Exit codes:** three outcomes, three codes (decision #37).
+
+| Code | Meaning |
+|---|---|
+| 0 | The chapter reached `complete`: prose written, chapter promoted to `pending-review`, pointer advanced. Also a dry-run. |
+| 1 | Nothing usable happened. Refusals (existing chapter without `--force`, failed confirmation, an interrupted session without `--resume`, a blocked pointer), and an all-routes-exhausted session (whose ADR-0005 stub and audit JSON are still written first). Config/validation errors exit 1 via the shared error handler. |
+| 2 | `editorial-pending`: the prose is on disk and canon was deliberately left untouched. Reached three ways — no editor route answered, no valid delta within `max_repair_attempts`, or the delta reported a **critical** contradiction and was refused whole (ADR-0009). The third is the pipeline working, and the CLI says so in different words from the other two. Resumable with `--resume`. |
 
 **Audit JSON** is written to `log/sessions/<session-id>.json` on every
 real run (never on dry-runs): session id, book slug, chapter number,
@@ -794,13 +824,14 @@ frontmatter, not from config. It exits 0 whenever the chapter was
 measured, including when metrics fall outside their bands, and 1 only on
 a real error (missing chapter or style guide, malformed thresholds).
 
-*(Status as of 2026-09-01: `new-book`, `write-session`, and
-`check-style` are fully implemented; `--resume` waits for the Phase 6
-state machine. There is deliberately **no editorial CLI entry point** —
-`editorial/pass_runner.py` and `editorial/reconciler.py` exist and are
-tested, but nothing invokes them from a shell. Wiring them into
-`write-session` is Phase 6, and doing it earlier would hand the engine
-the ability to write canon on a real vault while OQ-01 is unresolved.)*
+*(Status as of 2026-09-04: all three commands are fully implemented,
+`--resume` included. There is still no separate editorial entry point and
+there should not be one — `write-session` runs the pass as part of the
+lifecycle, which is the only context in which a delta has a chapter, a
+phase, and a pointer to record itself against. **The engine can now write
+canon from a shell command**, which is exactly the capability OQ-01 was
+holding back: it runs against `vault/example-book/` only, and a real book
+needs either OQ-01 resolved or `editorial.enabled: false`.)*
 
 `--dry-run` is not a nicety. Prompt tuning is the highest-iteration activity
 in the project and the free-tier quota is the hardest constraint on it;

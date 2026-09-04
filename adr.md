@@ -806,6 +806,12 @@ lifecycle:
    refuses, naming the chapter, the phase, and the flag. `--resume` re-enters
    the pipeline at the recorded phase and never re-drafts existing prose;
    replacing prose is still `--force` plus a typed confirmation (invariant 5).
+   `--force` on a mid-flight session abandons it through
+   `SessionStateMachine.restart()`, which writes a fresh `target` pointer
+   without validating a transition — abandoning a session is not a
+   lifecycle step, and `validate_transition` correctly refuses
+   `drafted -> target`. It is the only write that skips validation, it is
+   named for what it does, and the automatic path never calls it.
 
 ### Consequences
 

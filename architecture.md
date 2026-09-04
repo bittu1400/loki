@@ -83,7 +83,7 @@ allowed to write what?*
 
 | Artifact | Written by | Mode | Rationale |
 |---|---|---|---|
-| `chapters/chapter-XXX.md` | Engine | Create once, then author-owned | Generated prose; the author edits freely afterwards |
+| `chapters/chapter-XXX.md` | Engine | Create once, then author-owned; ONE later exception | Generated prose; the author edits freely afterwards. The exception is `flip_chapter_status`, which promotes `draft` -> `pending-review` when a session completes — one frontmatter cell, never the body, so `generated_hash` and the author-edit signal survive (decision #35) |
 | `canon/continuity-tracker.md` | Engine | **Append only** | Locked facts must never be summarised away |
 | `canon/open-threads.md` | Engine | **Append + status flip** | A thread may be marked resolved, never deleted |
 | `canon/deepen-queue.md` | Engine | **Append only** | Queue of gaps for the author to answer later |
@@ -184,12 +184,19 @@ The model therefore emits a **delta**, and Python appends.
 Step 9's fail-closed behaviour matters more than it looks. A half-applied
 delta is worse than no delta: it corrupts canon while reporting success.
 
-**Implementation status (2026-09-03).** Steps 1, 3–7 and 11 run from
-`write-session`. Steps 8–10 exist as tested library code (`quality/`,
-`editorial/pass_runner.py`, `editorial/reconciler.py`). Phase 6 Session 9
-implemented the `log/next-step.md` contract, `vault.write_next_step()`, and
-`SessionStateMachine` (Batches 1 & 2); Step 2 (resume) and wiring the full
-pipeline into `write-session` (Batches 3 & 4) are currently in progress.
+**Implementation status (2026-09-04).** All eleven steps run from
+`write-session`. Phase 6 Session 9 built the `log/next-step.md` contract,
+`vault.write_next_step()`, and `SessionStateMachine` (Batches 1 & 2);
+Session 10 added `vault.flip_chapter_status`, the resume gate, and the
+review phases (Batches 3 & 4). Step 2 resumes from the recorded phase
+only with `--resume`; a bare re-run of an interrupted session refuses and
+names the phase (decision #38). Step 11 now sets `pending-review` and
+carries the delta's `next_step_note` into the pointer.
+
+What this does NOT mean: the pipeline is exercised end to end against
+`vault/example-book/` with fake providers and one live editorial run from
+Session 8. It has never run against a real book, and must not while OQ-01
+is open.
 
 ## 5. Context assembly — what the model actually sees
 
@@ -350,7 +357,8 @@ src/novel_engine/
   core/
     config.py            # Pydantic settings; models.yaml + pipeline.yaml + startup validation
     vault.py             # THE ONLY WRITER: scaffold_book, write_chapter,
-                         #   flip_manifest_status, generated_hash
+                         #   flip_manifest_status, flip_chapter_status,
+                         #   generated_hash, canon appends, write_next_step
     outline.py           # manifest parsing; next_target(), resolve_target()
     context_builder.py   # fact parsing/retrieval by entity; verbatim tail;
                          #   template slot filling in file order
@@ -358,7 +366,8 @@ src/novel_engine/
                          #   VaultError, EditorialError. (ManifestError
                          #   subclasses ConfigError and lives in outline.py,
                          #   next to the parser that raises it)
-    state_machine.py     # STUB — Phase 6
+    state_machine.py     # next-step.md schema, LEGAL_TRANSITIONS,
+                         #   SessionStateMachine (transition/restart/block)
   providers/
     base.py              # abstract provider; five normalised outcome types
     openai_compat.py     # shared OpenAI-shaped client (openrouter/groq/mistral/
