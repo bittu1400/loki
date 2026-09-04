@@ -14,13 +14,31 @@ record of what was once uncertain is useful.
 
 ---
 
-## 🔴 OQ-01 — What replaces git as the recovery path for real vault content?
+## ~~🔴 OQ-01 — What replaces git as the recovery path for real vault content?~~ — RESOLVED 2026-09-04
 
-**Blocks:** running `write-session` against any real vault at all —
-widened 2026-09-04. Until Session 10 this blocked the Phase 5 library
-code, which nothing invoked; now `write-session` runs the editorial pass
-and the reconciler as part of every session, so the blocked surface is
-the main command rather than an unreachable module.
+**Resolved by decisions #40 and #41,
+[ADR-0013](adr.md#adr-0013--every-real-book-is-its-own-git-repository).**
+The recommendation below was adopted unchanged after standing unopposed
+since Session 5: `vault/<slug>/` is its own git repository, nested inside
+this repo and ignored by it, and the engine commits twice per session —
+the author's edits before it starts, its own writes after it ends. No
+remote is configured and nothing is ever pushed. Restore is deliberately
+not implemented: `git -C vault/<slug> checkout HEAD~1` already does it,
+and an engine that can check out old content is an engine that can
+overwrite author prose without `--force` (invariant 5).
+
+A session that cannot snapshot and would write canon is **refused**
+(decision #41). Proceeding would be a safety net reporting success while
+catching nothing — pitfall A6's shape, applied to backups.
+
+**What this does NOT buy.** It is local history on one disk. It is not an
+off-machine backup, and a disk failure still loses the book. That limit
+is stated here rather than left for someone to discover.
+
+**Historical record of the question follows.**
+
+**Blocked:** running `write-session` against any real vault, from
+Session 5 until 2026-09-04.
 **Referenced by:** [ADR-0004](adr.md#adr-0004--vault-location-and-what-gets-committed),
 [threat-model.md](threat-model.md) T2.
 

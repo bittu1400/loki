@@ -302,9 +302,14 @@ config change, not a refactor.
   This is an accepted risk, not an oversight. A replacement snapshot or
   backup mechanism is required before the pipeline is allowed to write to a
   real vault. Tracked as an open question — see
-  [open-questions.md](open-questions.md), OQ-01. **Phase 5 (the editorial
-  delta pass, the component that writes to canon) must not ship against a
-  real vault until OQ-01 is resolved.**
+  [open-questions.md](open-questions.md), OQ-01 — **resolved 2026-09-04
+  by [ADR-0013](adr.md#adr-0013--every-real-book-is-its-own-git-repository),
+  which amends this ADR: real manuscripts stay gitignored here and each
+  one becomes its own repository, so privacy is unchanged and the history
+  this ADR removed is restored.** The sentence that stood here from
+  Session 4 until then — *"Phase 5 must not ship against a real vault
+  until OQ-01 is resolved"* — is satisfied rather than deleted: it did
+  not ship against one, and OQ-01 is now resolved.
 
 - Engine and manuscript share a repo, so open-sourcing the engine later
   requires a history split.

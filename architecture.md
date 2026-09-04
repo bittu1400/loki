@@ -91,6 +91,7 @@ allowed to write what?*
 | `log/next-step.md` | Engine | Overwrite | Pure operational pointer, no history value |
 | `log/sessions/*.json` | Engine | Create once, immutable | Audit record of what actually happened |
 | `log/sessions/<id>-patches.md` | Engine | Create once | Model suggestions about author-owned files, as text; never a write path (threat-model T4) |
+| `vault/<slug>/.git` | Engine | Append-only history | Per-session commits, created on demand for a book no enclosing repo tracks. The engine only adds and commits; it never checks out, so this records content and cannot change it (ADR-0013) |
 | `canon/plot-outline.md` | **Author only**, with ONE exception | Engine flips a single `status` cell; never writes prose, beats, or rows | High-stakes structural artifact — the exception is mechanical and byte-verified (decision #16, specs §2) |
 | `characters/*.md` | **Author only** | Engine may suggest, never write | High-stakes; voice depends on these |
 | `canon/story-bible.md` | **Author only** | Never touched by engine | Premise and themes are not the model's business |
@@ -141,6 +142,12 @@ The model therefore emits a **delta**, and Python appends.
  4. ASSEMBLE    Build a bounded context (see §5). Under DRY_RUN, print it
                 and stop here — zero API cost.
 
+ 4b. SNAPSHOT   Last moment before the first write: make sure the book has
+                its own git repo, and commit the author's edits since the
+                last session as their own commit (ADR-0013). If there is
+                no recovery path and this session would write canon,
+                refuse here — exit 1, nothing written.
+
  5. DRAFT       Call the assigned model. On an eligible failure, walk the
                 fallback chain. Never switch model mid-chapter.
 
@@ -152,11 +159,14 @@ The model therefore emits a **delta**, and Python appends.
                 recording which model actually served it. Status: drafted.
 
  8. INSPECT     Run deterministic checks in pure Python, zero API cost:
-                the §14 style metrics AND the §16 number check, which
-                compares quantities in the chapter against quantities in
-                the retrieved locked facts. Both feed the session report
-                and are handed to the editorial pass as evidence rather
-                than re-derived by an LLM.
+                the §14 style metrics, the §16 number check (quantities in
+                the chapter against quantities in the retrieved facts) and
+                the §17 entity check (a fact's claim given to a different
+                NAME). All three feed the session report and are handed to
+                the editorial pass as evidence rather than re-derived by
+                an LLM. The two continuity checks exist because the model
+                was measured missing each class unaided and catching it
+                with the finding in its prompt (ADR-0008, ADR-0012).
 
  9. EDITORIAL   Send retrieved locked facts + open threads + the beat it
                 was supposed to hit + the POV's character sheet + style
@@ -177,26 +187,33 @@ The model therefore emits a **delta**, and Python appends.
                 a session file, never to the targets themselves, and never
                 to stdout.
 
-11. REPORT      Write log/sessions/<session-id>.json. Print a human summary.
-                Set chapter status to pending-review. Update next-step.md.
+11. REPORT      Set chapter status to pending-review, update next-step.md,
+                write log/sessions/<session-id>.json, then commit the
+                whole book as this session's snapshot — the audit is
+                inside the commit that describes it. Print a human
+                summary. Exit 0 complete, 1 nothing usable, 2
+                editorial-pending.
 ```
 
 Step 9's fail-closed behaviour matters more than it looks. A half-applied
 delta is worse than no delta: it corrupts canon while reporting success.
 
-**Implementation status (2026-09-04).** All eleven steps run from
+**Implementation status (2026-09-04).** All twelve steps run from
 `write-session`. Phase 6 Session 9 built the `log/next-step.md` contract,
 `vault.write_next_step()`, and `SessionStateMachine` (Batches 1 & 2);
-Session 10 added `vault.flip_chapter_status`, the resume gate, and the
-review phases (Batches 3 & 4). Step 2 resumes from the recorded phase
-only with `--resume`; a bare re-run of an interrupted session refuses and
-names the phase (decision #38). Step 11 now sets `pending-review` and
-carries the delta's `next_step_note` into the pointer.
+Session 10 added `vault.flip_chapter_status`, the resume gate, the review
+phases (Batches 3 & 4), the §17 entity check, and step 4b's snapshots.
+Step 2 resumes from the recorded phase only with `--resume`; a bare
+re-run of an interrupted session refuses and names the phase (decision
+#38). Step 11 sets `pending-review`, carries the delta's
+`next_step_note` into the pointer, and commits the session.
 
-What this does NOT mean: the pipeline is exercised end to end against
-`vault/example-book/` with fake providers and one live editorial run from
-Session 8. It has never run against a real book, and must not while OQ-01
-is open.
+What this does NOT mean. The pipeline is exercised end to end against
+`vault/example-book/` with fake providers, plus live editorial runs in
+Sessions 8 and 10. **It has never drafted and reconciled a chapter
+against a real book.** OQ-01 no longer forbids that (ADR-0013 gives every
+real book a per-session history), but "no longer forbidden" is not "has
+been done".
 
 ## 5. Context assembly — what the model actually sees
 
@@ -328,6 +345,17 @@ into the editorial prompt as evidence
 specs §16). With the finding in front of it, the same model caught the
 same case on both later runs.
 
+**And again for names (2026-09-04, decision #39).** The same experiment
+on an identity contradiction — a locked fact says Ovist keeps the echo
+ledger, the chapter says Brannec does — produced the same shape: two
+misses at temperature 0.2 with the fact in the prompt, and a first-call
+`critical` catch once a deterministic finding was added. So
+`quality/continuity_entities.py` joined it (specs §17,
+[ADR-0012](adr.md#adr-0012--the-deterministic-layer-extends-to-entity-disagreements)).
+Two classes now work because Python finds them first, which is the
+strongest available reason to distrust the classes where nothing does —
+dates, orderings, rewritten quantities, capabilities (OQ-10).
+
 The division is now: **Python finds what is mechanical** (style tells,
 number disagreements), **the model judges what is not** (does this
 contradict, did the beat land, what is newly true), and **neither is a
@@ -368,6 +396,8 @@ src/novel_engine/
                          #   next to the parser that raises it)
     state_machine.py     # next-step.md schema, LEGAL_TRANSITIONS,
                          #   SessionStateMachine (transition/restart/block)
+    snapshot.py          # per-session git history for a book (ADR-0013).
+                         #   Writes .git only; add+commit, never checkout
   providers/
     base.py              # abstract provider; five normalised outcome types
     openai_compat.py     # shared OpenAI-shaped client (openrouter/groq/mistral/
@@ -385,6 +415,9 @@ src/novel_engine/
     style_checks.py      # THRESHOLDS parsing, judge(), build_report()
     continuity_numbers.py # number-disagreement finder (decision #30); evidence
                          #   for the editorial prompt, never a gate
+    continuity_entities.py # name-disagreement finder (decision #39, specs §17);
+                         #   paragraph-scoped, proximity-guarded, same rule:
+                         #   evidence for the prompt, never a gate
   editorial/
     schema.py            # delta models; extra="forbid"; canon-line text guards
     pass_runner.py       # prompt/call/validate/repair; fail-closed, writes nothing
@@ -398,9 +431,12 @@ tests/                   # fakes.py holds the scripted Provider doubles
 ```
 
 Layout rationale: `providers/` knows nothing about novels, `quality/` and
-`editorial/` know nothing about HTTP, and `vault.py` is the only module that
-writes to disk. That last constraint is what makes the authority model in §3
-enforceable rather than aspirational.
+`editorial/` know nothing about HTTP, and `vault.py` is the only module
+that writes vault content. That last constraint is what makes the
+authority model in §3 enforceable rather than aspirational. `snapshot.py`
+is the single deliberate neighbour: it writes `.git` and nothing else,
+records history rather than changing content, and has no restore path
+(ADR-0013).
 
 ## 9. Deferred phases
 

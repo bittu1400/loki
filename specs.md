@@ -449,8 +449,11 @@ auto_publish: false
 `editorial.enabled` is **live as of Phase 6 Session 10**: `false` runs
 drafting and the style checks, skips the editorial call entirely, and
 takes the `styled -> complete` edge, which is the only route to
-`complete` that writes no canon (decision #36). It is the configuration a
-real vault can run while OQ-01 is open. `editorial.fail_closed` is still
+`complete` that writes no canon (decision #36). It was the only shape a
+real vault could safely take while OQ-01 was open; since ADR-0013 closed
+that, it is what a book runs when the author wants drafts without a
+continuity ledger — and the one configuration allowed to proceed on a
+machine with no git (decision #41). `editorial.fail_closed` is still
 **parsed and validated but not consulted**, and has no false branch —
 failing closed is invariant 2, not a preference, so the key exists to
 make that explicit in the file rather than to switch it off. `auto_publish` is deferred (ADR-0001). A key that is declared and
@@ -497,8 +500,31 @@ as OQ-03.
         The one route to complete that writes no canon.
 ```
 
+**The legal transitions, exactly as `LEGAL_TRANSITIONS` defines them.**
+The diagram above is the happy path; this table is the contract, and it
+includes two self-loops the diagram cannot show.
+
+| From | May go to | Why |
+|---|---|---|
+| `complete` | `target` | A finished session; the next one starts here |
+| `target` | `target`, `drafted` | The self-loop is a re-entered session whose draft never landed |
+| `drafted` | `styled` | Deterministic checks always run before the editorial call |
+| `styled` | `editorial-pending`, `reconciled`, `complete` | The third is the `editorial.enabled: false` escape (decision #36) and the only route to `complete` that writes no canon |
+| `editorial-pending` | `editorial-pending`, `reconciled` | The self-loop is a retry that failed again |
+| `reconciled` | `complete` | — |
+
+Anything else raises `StateMachineError`, naming the attempted transition
+and every legal option from that phase. The one write that skips this
+check is `SessionStateMachine.restart()`, because abandoning a session is
+not a transition (decision #38); it is reachable only through `--force`,
+which already costs a typed confirmation.
+
 **Chapter status** (frontmatter): `draft` → `pending-review` → `approved` →
-`published`. Only the first two are reachable in v1 (ADR-0001).
+`published`. Only the first two are reachable in v1 (ADR-0001), and
+`vault.LEGAL_CHAPTER_STATUSES` contains exactly those two — the engine
+cannot write `approved` or `published` at all. `failed-stub` is written
+by `write_chapter` at creation and is never flipped: a stub is replaced
+with `--force`, not promoted.
 
 **Rules**
 
@@ -704,8 +730,8 @@ redacts by allowlist, not by blocklist.
 
 **Status (2026-09-04).** Complete as specified. `cli/write_session.py`
 writes one record per invocation at session end: session id, book slug,
-chapter number, POV, beat, whether the run was a resume, the final phase
-reached, the drafting model/fallback/continuation/token fields with one
+chapter number, POV, beat, whether the run was a resume, whether the book
+has session snapshots (§18), the final phase reached, the drafting model/fallback/continuation/token fields with one
 record per call attempt, `style_metrics` (every value `quality/metrics.py`
 computes) with the list of flagged metric names, and an `editorial` block
 carrying the pass status, repair rounds, models, tokens, its own call
@@ -809,7 +835,7 @@ check-style --book <book-slug> --chapter N
 | Code | Meaning |
 |---|---|
 | 0 | The chapter reached `complete`: prose written, chapter promoted to `pending-review`, pointer advanced. Also a dry-run. |
-| 1 | Nothing usable happened. Refusals (existing chapter without `--force`, failed confirmation, an interrupted session without `--resume`, a blocked pointer), and an all-routes-exhausted session (whose ADR-0005 stub and audit JSON are still written first). Config/validation errors exit 1 via the shared error handler. |
+| 1 | Nothing usable happened. Refusals (existing chapter without `--force`, failed confirmation, an interrupted session without `--resume`, a blocked pointer, **no recovery path for a canon-writing session** — §18), and an all-routes-exhausted session (whose ADR-0005 stub and audit JSON are still written first). Config/validation errors exit 1 via the shared error handler. |
 | 2 | `editorial-pending`: the prose is on disk and canon was deliberately left untouched. Reached three ways — no editor route answered, no valid delta within `max_repair_attempts`, or the delta reported a **critical** contradiction and was refused whole (ADR-0009). The third is the pipeline working, and the CLI says so in different words from the other two. Resumable with `--resume`. |
 
 **Audit JSON** is written to `log/sessions/<session-id>.json` on every
@@ -828,10 +854,11 @@ a real error (missing chapter or style guide, malformed thresholds).
 `--resume` included. There is still no separate editorial entry point and
 there should not be one — `write-session` runs the pass as part of the
 lifecycle, which is the only context in which a delta has a chapter, a
-phase, and a pointer to record itself against. **The engine can now write
+phase, and a pointer to record itself against. **The engine can write
 canon from a shell command**, which is exactly the capability OQ-01 was
-holding back: it runs against `vault/example-book/` only, and a real book
-needs either OQ-01 resolved or `editorial.enabled: false`.)*
+holding back — and OQ-01 is now resolved (ADR-0013): every real book gets
+its own per-session git history, and a session that cannot snapshot while
+writing canon is refused. A real book has still never actually been run.)*
 
 `--dry-run` is not a nicety. Prompt tuning is the highest-iteration activity
 in the project and the free-tier quota is the hardest constraint on it;
@@ -976,3 +1003,86 @@ every committed fixture chapter**. Both guards are tuned to measured
 outcomes; loosening either without re-running that test is how the check
 starts crying wolf, and a check that cries wolf gets ignored exactly
 when it is right.
+
+
+---
+
+## 18. Per-session vault snapshots — `core/snapshot.py`
+
+Added 2026-09-04 (decisions #40 and #41,
+[ADR-0013](adr.md#adr-0013--every-real-book-is-its-own-git-repository)).
+Resolves OQ-01, the recovery path ADR-0004 removed when it gitignored
+real manuscripts.
+
+**The shape.** `vault/<slug>/` is its own git repository, created on
+demand, nested inside this repo and invisible to it — everything under
+`vault/` except the fixture is already gitignored. **No remote is ever
+configured and nothing is ever pushed.**
+
+**Two commits per session, in this order:**
+
+| When | Message | Contains |
+|---|---|---|
+| Before the first write | `author edits before session <id>` | Anything the author changed since the last session. On a book's first session this is the whole book, as the baseline commit. |
+| After the audit is written | `session <id>: chapter NNN <phase>` | Everything the engine wrote: the chapter, the canon appends, the manifest cell, the pointer, the audit JSON. |
+
+Two rather than one because a single commit welds the author's edits to
+the engine's, and then `checkout HEAD~1` — "undo that session" — also
+undoes the author's morning. The session commit comes after the audit so
+one commit is a complete account of one session.
+
+**What the engine may do:** `git init`, `git add -A`, `git commit`, and
+the reads needed to decide those. That is the entire surface.
+
+**What it may not do, permanently:** check out, reset, revert, or
+otherwise write a byte of book content. Restore is the author's, through
+plain git:
+
+```bash
+git -C vault/<slug> log --oneline      # every session, newest first
+git -C vault/<slug> show HEAD          # what the last session changed
+git -C vault/<slug> checkout HEAD~1    # undo the last session
+```
+
+An engine that could check out old content could overwrite author prose
+without `--force`, which is invariant 5. This boundary is why
+`snapshot.py` writing to disk does not break the one-writer rule: it
+writes `.git` and records content; `vault.py` remains the only module
+that changes it.
+
+**Books an enclosing repository already tracks are skipped.**
+`vault/example-book/` is committed to this repo, which is already its
+history; a nested repo inside it would be a second history of the same
+bytes. Detected with `git ls-files` inside the book, after checking for
+its own `.git`.
+
+**Identity.** The machine's configured git identity is used as-is. Only
+when there is none does the engine supply `novel-engine
+<novel-engine@localhost>`, because a commit with no identity fails
+outright and a session that cannot commit has no undo.
+
+**No recovery path is a refusal (decision #41).** If git is unavailable,
+a session with `editorial.enabled: true` exits **1** before writing
+anything, naming the reason. With `editorial.enabled: false` it warns and
+continues: that configuration appends no canon, and its chapter write is
+create-only. Proceeding silently in the first case would be a safety net
+reporting success while catching nothing — pitfall A6's shape, applied to
+backups.
+
+**Not to be confused with `canon_transaction`** (ADR-0007, pitfall A8).
+That copies the four canon files for the duration of one apply and
+restores them if it fails; this commits the whole book, per session,
+permanently. Neither is a substitute for the other and neither is a
+backup.
+
+**Deliberately out of scope:** off-machine backup. This is local history
+on one disk. A disk failure still loses the book, and no wording in this
+project may imply otherwise. Putting the manuscript on someone else's
+servers is the trade ADR-0004 refused and ADR-0013 did not reopen.
+
+**A consequence worth knowing before it bites.** A book now contains a
+`.git` directory, and `_check_filenames` used to walk into it and reject
+`COMMIT_EDITMSG` as not kebab-case — which would have made a real book
+fail to load on its *second* session. Hidden directories are pruned from
+that walk. Any future validator that walks a book must do the same.
+

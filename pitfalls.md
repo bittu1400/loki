@@ -157,6 +157,26 @@ whole, before anything is written (invariant 6,
 Suggested canon patches are text in a session log and are never applied,
 never a write path.
 
+### 🟠 A8 — "Snapshot" meaning two different things
+
+**The trap.** This project now has two mechanisms with the same name, at
+different scales, and confusing them means trusting the wrong one.
+
+| | `canon_transaction` (ADR-0007) | `core/snapshot.py` (ADR-0013) |
+|---|---|---|
+| Scope | The four canon files, for one apply | The whole book, per session |
+| Lifetime | Seconds; discarded on success | Permanent git history |
+| Recovers | A delta that failed halfway | A session the author wants undone tomorrow |
+| Mechanism | Copy to a temp dir, restore on failure | `git add` + `git commit` in `vault/<slug>/` |
+
+Neither is a substitute for the other, and **neither is a backup.**
+`canon_transaction` was mistaken for OQ-01's answer more than once before
+OQ-01 was actually resolved; the note is kept here so the next reader
+does not repeat it.
+
+**Countermeasure.** Say which one. When a doc or a commit message says
+"snapshot", it names the ADR.
+
 ### 🔴 B1 — Building the machine before testing the generator
 
 **The trap.** The architecture is interesting and the prose question is

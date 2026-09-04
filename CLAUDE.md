@@ -126,8 +126,13 @@ ADR, never a shortcut. There are six.
 
 ## Structural facts worth knowing before you edit anything
 
-- **`core/vault.py` is the only module that writes to disk.** Everything
-  else returns data. This is what makes the authority model reviewable.
+- **`core/vault.py` is the only module that writes vault content.**
+  Everything else returns data. This is what makes the authority model
+  reviewable. One deliberate neighbour: `core/snapshot.py` (ADR-0013)
+  runs `git add`/`git commit` inside a book, writing only `.git`. It
+  records content, never changes it, and has no restore path on purpose
+  — restoring is `git -C vault/<slug> checkout HEAD~1`, and an engine
+  that could do it could overwrite prose without `--force`.
 - **`vault.py` exposes narrowly-scoped primitives only** — as of Phase 6:
   `scaffold_book`, `write_chapter` (create-only, hash-verified), two
   single-cell mechanical edits — `flip_manifest_status` (one manifest
@@ -213,14 +218,22 @@ ADR, never a shortcut. There are six.
 - **Real vault content is gitignored** (ADR-0004). All development touching
   destructive paths runs against the committed `vault/example-book/`
   fixture.
-- **`write-session` writes canon now, and OQ-01 blocks the whole command
-  against a real vault** — not just the editorial modules, as it did
-  through Phase 5. It runs against `vault/example-book/`, which git can
-  restore. `canon_transaction` is NOT the resolution of OQ-01: it
+- **OQ-01 is resolved (ADR-0013) and a real book is no longer
+  categorically blocked — but none has ever been run.** Every real book
+  becomes its own git repo at `vault/<slug>/.git`; `write-session`
+  commits the author's edits before it starts and its own writes after it
+  ends, so "undo that session" is `git -C vault/<slug> checkout HEAD~1`.
+  A session that cannot snapshot AND would write canon is refused
+  (decision #41). `canon_transaction` was never the answer to OQ-01: it
   recovers one interrupted apply, not a session an author wants to undo
-  tomorrow. The one safe shape for a real book today is
-  `editorial.enabled: false`, which drafts and takes the `styled ->
-  complete` edge without touching canon (decision #36).
+  tomorrow. What snapshots do NOT buy is off-machine backup — this is
+  local history on one disk, and a disk failure still loses the book.
+- **"Snapshot" means two different things, and neither is a backup**
+  (pitfall A8). `canon_transaction` (ADR-0007) copies the four canon
+  files for the duration of one apply and restores them if it fails.
+  `core/snapshot.py` (ADR-0013) commits the whole book to its own git
+  repo, twice per session, permanently. Name the ADR when you say the
+  word.
 - **The session pointer owns the target whenever a session is
   mid-flight**, not the manifest. Drafting flips the manifest row to
   `written`, so `next_target()` would skip straight past a chapter whose
@@ -256,6 +269,11 @@ uv run write-session --book <slug>             # full lifecycle; 0/1/2
 uv run write-session --book <slug> --resume    # continue from the recorded phase
 uv run new-book --slug <slug>
 uv run check-style --book <slug> --chapter N
+
+# Recovery (ADR-0013). Plain git, deliberately not an engine command.
+git -C vault/<slug> log --oneline    # every session, newest first
+git -C vault/<slug> show HEAD        # what the last session changed
+git -C vault/<slug> checkout HEAD~1  # undo the last session
 ```
 
 `--dry-run` is the default way to iterate on prompts. Free-tier daily caps

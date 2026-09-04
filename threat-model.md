@@ -144,7 +144,7 @@ Both remain accepted: the `origin` tag, the append-only ledger, and the
 session audit make them findable and reversible by hand. Neither is
 silent in the way a rewritten file body would be.
 
-### T2 — Manuscript loss with no recovery path 🟠 Medium × High
+### T2 — Manuscript loss with no recovery path 🟢 CLOSED 2026-09-04
 
 **Vector.** ADR-0004 gitignores real vault content. Several safeguards in
 this design assume git history can recover a corrupted tracker. For real
@@ -152,15 +152,25 @@ books, that history does not exist. A bad delta, an errant `--force`, or a
 disk failure has no undo.
 
 **Countermeasures**
-- **Blocking:** Phase 5 (the editorial delta pass — the first component that
-  writes to canon) must not run against a real vault until a snapshot
-  mechanism exists. Tracked as OQ-01, and referenced from ADR-0004.
-- Until then, all destructive-path development runs against
-  `vault/example-book/`, which *is* committed.
+- **Resolved (decisions #40/#41,
+  [ADR-0013](adr.md#adr-0013--every-real-book-is-its-own-git-repository)):**
+  every real book is its own git repository at `vault/<slug>/.git`, and
+  `write-session` commits twice per session — the author's edits before
+  it starts, its own writes after it ends. "Undo that session" is
+  `git -C vault/<slug> checkout HEAD~1`.
+- **A session that cannot snapshot and would write canon is refused.** No
+  recovery path means no canon write; the exception is
+  `editorial.enabled: false`, which appends nothing.
+- All destructive-path development still runs against
+  `vault/example-book/`, which is committed to this repo.
 - `--force` prints the destructive action and requires confirmation.
 
-**Residual risk.** High until OQ-01 is resolved. This is the single most
-important unresolved item in the project.
+**Residual risk.** Low, with one limit stated plainly: this is local
+history on one disk, not an off-machine backup. A disk failure still
+loses the book, and no wording anywhere should imply otherwise. Off-site
+backup remains the author's own arrangement, deliberately — ADR-0004
+refused to put the manuscript on someone else's servers and ADR-0013 did
+not reopen that.
 
 ### T3 — API key disclosure 🟠 Medium × Medium
 
@@ -360,8 +370,9 @@ Verified before a phase is marked complete in [progress.md](progress.md).
       silently block prose
 - [x] `check-style` only ever reads; it has no write path to the vault
 
-**Phase 5 — editorial** *(built against the fixture only; still blocked on
-OQ-01 for any real vault)*
+**Phase 5 — editorial** *(built and exercised against the fixture; OQ-01
+resolved 2026-09-04, so a real vault is no longer categorically blocked —
+it has never actually been run against one)*
 - [x] Delta schema-validated before any write — `parse_delta` is the only
       way in, and the reconciler's signature accepts nothing else
       (`test_editorial_schema.py`)
@@ -379,8 +390,26 @@ OQ-01 for any real vault)*
 - [x] Snapshot/backup mechanism exists and is tested — `canon_transaction`
       snapshots every canon file, restores all of them on any failure, and
       KEEPS the snapshot directory (named in the error) when it does.
-      **This covers one interrupted apply, not OQ-01**: an author who
-      wants yesterday's canon back still has no path for a real vault
+      **This covers one interrupted apply, and only that.** Yesterday's
+      canon is a different mechanism: `core/snapshot.py` commits the book
+      to its own git repo twice per session (ADR-0013), which is what
+      closed OQ-01 on 2026-09-04
+
+**Phase 6 — session lifecycle** *(verified 2026-09-04, Session 10)*
+- [x] Every phase transition is persisted before the next phase begins,
+      so an interrupted session is always resumable and never silently
+      re-drafted (`test_state_machine.py`, `test_write_session_cli.py`)
+- [x] Resuming is opt-in: a bare re-run of an interrupted session refuses
+      and names the chapter, the phase, and the flag (decision #38)
+- [x] `flip_chapter_status` rewrites one frontmatter cell and verifies the
+      body is byte-identical afterwards, so promoting a chapter cannot
+      touch prose or `generated_hash`
+      (`test_flip_chapter_status_leaves_body_and_hash_alone`)
+- [x] A session that cannot snapshot and would write canon is refused
+      before the first write (`test_no_git_refuses_a_canon_writing_session`)
+- [x] The author's edits and the engine's writes are separate commits, so
+      undoing a session does not undo the author's own work
+      (`test_author_edits_are_committed_separately_from_engine_writes`)
 
 **Phase 7+ — automation** *(deferred)*
 - [ ] Secrets in Actions secrets, never in the repo

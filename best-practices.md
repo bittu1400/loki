@@ -34,14 +34,24 @@ Never write a bare `except:` or a silent `except Exception: pass`. If a
 failure is genuinely ignorable, log it at `DEBUG` with the reason.
 
 **The one-writer rule.** `core/vault.py` is the only module permitted to
-write to disk. Everything else returns data. This is what makes the
-authority model in [architecture.md](architecture.md) §3 enforceable rather
-than aspirational — a reviewer checks one file, not the whole tree.
+write **vault content**. Everything else returns data. This is what makes
+the authority model in [architecture.md](architecture.md) §3 enforceable
+rather than aspirational — a reviewer checks one file, not the whole tree.
+
+There is exactly one other module that touches the disk, and the
+distinction is deliberate rather than a loophole: `core/snapshot.py`
+(ADR-0013) runs `git add` and `git commit` inside a book, which write
+only `.git` and never a byte of book content. It has no code path that
+modifies a tracked file, and restore is deliberately unimplemented —
+an engine that could check out old content could overwrite author prose
+without `--force`, which is invariant 5. If a snapshot restore ever
+becomes engine work, that is an ADR.
 
 **Narrowly-scoped primitives.** `vault.py` exposes only what a phase
-needs, each refusing everything else: as of Phase 3, `scaffold_book`,
-`write_chapter` (create-only, hash-verified), and
-`flip_manifest_status` (single-cell mechanical edit). The append
+needs, each refusing everything else: as of Phase 6, `scaffold_book`,
+`write_chapter` (create-only, hash-verified), two single-cell mechanical
+edits (`flip_manifest_status`, `flip_chapter_status`), and one overwrite
+primitive (`write_next_step`). The append
 primitives the editorial reconciler will need — `append_fact()`,
 `append_summary()`, `append_thread()`, `flip_thread_status()` — arrive in
 Phase 5. It exposes no general "write canon file" function, and if a
