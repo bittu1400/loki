@@ -9,9 +9,21 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from fakes import FakeProvider, full_providers, reset_fixture_state, text_of
+from fakes import (
+    FakeProvider,
+    editorial_delta,
+    full_providers,
+    reset_fixture_state,
+    text_of,
+)
 from novel_engine.cli.write_session import run_session
 from novel_engine.core.outline import parse_manifest
+from novel_engine.core.state_machine import NextStep
+from novel_engine.core.vault import (
+    read_next_step,
+    split_chapter_file,
+    write_next_step,
+)
 from novel_engine.providers.base import RateLimited, Success
 
 FIXTURE = Path(__file__).resolve().parents[1] / "vault" / "example-book"
@@ -121,9 +133,7 @@ def test_force_without_tty_refuses_confirmation(book, capsys) -> None:
 
 
 def test_full_run_writes_chapter_audit_and_flips_manifest(book) -> None:
-    providers = full_providers(
-        openrouter=FakeProvider(Success(text_of(45), "m3", 100, 60, 5))
-    )
+    providers = drafting_and_editorial()
     code = run_session(
         "example-book",
         book,
@@ -149,7 +159,11 @@ def test_full_run_writes_chapter_audit_and_flips_manifest(book) -> None:
 def new_session_files(vault_root: Path) -> list[Path]:
     """Session JSONs created by the run — reset_fixture_state cleared
     everything the committed fixture shipped with."""
-    return sorted((vault_root / "example-book/log/sessions").glob("sess-*.json"))
+    return sorted(
+        path
+        for path in (vault_root / "example-book/log/sessions").glob("sess-*.json")
+        if not path.name.endswith("-editorial.json")
+    )
 
 
 def test_all_routes_fail_stub_exit_code_one(book) -> None:
@@ -182,3 +196,320 @@ def test_dry_run_env_var(monkeypatch, book, capsys) -> None:
     assert new_session_files(book) == []
     assert not (book / "example-book/chapters/chapter-003.md").exists()
     assert "Ovist pulls nine years" in capsys.readouterr().out
+
+
+# --- Phase 6: state machine, resume, and the review phases --------------------
+
+
+def drafting_and_editorial(
+    delta: dict | None = None, editor: FakeProvider | None = None
+) -> dict[str, FakeProvider]:
+    """A provider set that can carry a session all the way to `complete`:
+    openrouter drafts ch-003 (ovist-rhoam's route), gemini edits it."""
+    return full_providers(
+        openrouter=FakeProvider(Success(text_of(45), "m3", 60, 5, 100)),
+        gemini=editor
+        or FakeProvider(
+            Success(json.dumps(delta or editorial_delta(3)), "flash-lite", 800, 300, 90)
+        ),
+    )
+
+
+def plan_chapter_four(vault_root: Path) -> None:
+    """reset_fixture_state trims the manifest to rows 1-3; give the book
+    somewhere for the pointer to advance TO."""
+    path = vault_root / "example-book/canon/plot-outline.md"
+    text = path.read_text(encoding="utf-8")
+    row = "| 004 | brannec-tull | arc-1 | planned | Sela Vosk names her price. |\n"
+    path.write_text(
+        text.replace("<!-- MANIFEST:END -->", row + "<!-- MANIFEST:END -->")
+    )
+
+
+def pointer(vault_root: Path):
+    return read_next_step(vault_root / "example-book")
+
+
+def park_at(vault_root: Path, phase: str, *, chapter: int = 3, **fields) -> None:
+    """Put log/next-step.md into a mid-flight phase, as a crash would."""
+    write_next_step(
+        vault_root / "example-book",
+        NextStep(
+            next_chapter=chapter,
+            next_pov="ovist-rhoam",
+            last_session_id="sess-20260904-1200-aaaa",
+            last_session_phase=phase,
+            last_session_status=phase,
+            **fields,
+        ),
+    )
+
+
+def canon_bytes(vault_root: Path) -> dict[str, str]:
+    root = vault_root / "example-book"
+    return {
+        name: (root / name).read_text(encoding="utf-8")
+        for name in (
+            "canon/continuity-tracker.md",
+            "canon/open-threads.md",
+            "canon/deepen-queue.md",
+            "log/chapter-summary.md",
+        )
+    }
+
+
+def editorial_audits(vault_root: Path) -> list[Path]:
+    return sorted((vault_root / "example-book/log/sessions").glob("*-editorial.json"))
+
+
+def test_completed_session_promotes_chapter_and_advances_pointer(book) -> None:
+    plan_chapter_four(book)
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(),
+        console=null_console(),
+    )
+    assert code == 0
+
+    fields, _ = split_chapter_file(
+        (book / "example-book/chapters/chapter-003.md").read_text(encoding="utf-8")
+    )
+    assert fields["status"] == "pending-review"
+
+    step = pointer(book)
+    assert step.last_session_phase == "complete"
+    assert step.next_chapter == 4  # the next planned manifest row, not 3
+    assert step.next_pov == "brannec-tull"
+
+
+def test_completed_session_appends_canon_and_writes_an_editorial_audit(book) -> None:
+    before = canon_bytes(book)
+    run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(),
+        console=null_console(),
+    )
+    after = canon_bytes(book)
+
+    assert "Ovist counts driftglass by weight." in after["canon/continuity-tracker.md"]
+    assert "Someone reset the ebb ledge." in after["canon/open-threads.md"]
+    assert "Ovist walked the ledge" in after["log/chapter-summary.md"]
+    for name, text in before.items():
+        # Append-only: canon grows, and not one existing line is rewritten.
+        assert len(after[name]) > len(text)
+        for line in text.splitlines():
+            assert line in after[name]
+
+    audits = editorial_audits(book)
+    assert len(audits) == 1
+    payload = json.loads(audits[0].read_text())
+    assert payload["status"] == "validated"
+    assert payload["applied"]["summary_added"] is True
+
+
+def test_interrupted_session_refuses_and_names_the_phase(book, capsys) -> None:
+    park_at(book, "drafted")
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 1
+    text = console_out.getvalue()
+    assert "chapter 003" in text
+    assert "'drafted'" in text
+    assert "--resume" in text
+
+
+def test_resume_with_nothing_to_resume_refuses(book) -> None:
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        resume=True,
+        providers=drafting_and_editorial(),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 1
+    assert "nothing to resume" in console_out.getvalue()
+
+
+def test_chapter_override_refused_while_another_session_is_open(book) -> None:
+    park_at(book, "styled", chapter=3)
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        chapter=1,
+        providers=drafting_and_editorial(),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 1
+    assert "records chapter 003" in console_out.getvalue()
+
+
+def test_blocked_pointer_refuses_before_anything_runs(book) -> None:
+    park_at(book, "complete", blocked=True, blocked_reason="quota exhausted")
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 1
+    assert "quota exhausted" in console_out.getvalue()
+    assert not (book / "example-book/chapters/chapter-003.md").exists()
+
+
+def test_resume_runs_the_review_phases_without_redrafting(book) -> None:
+    # First run: draft only, with a dead editor, so the session parks.
+    dead_editor = full_providers(
+        openrouter=FakeProvider(Success(text_of(45), "m3", 60, 5, 100)),
+    )
+    assert (
+        run_session(
+            "example-book",
+            book,
+            FAKE_ENV,
+            providers=dead_editor,
+            console=null_console(),
+        )
+        == 2
+    )
+    assert pointer(book).last_session_phase == "editorial-pending"
+    drafted = (book / "example-book/chapters/chapter-003.md").read_text()
+
+    # Second run resumes: the editor answers, and the prose is untouched.
+    providers = drafting_and_editorial()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        resume=True,
+        providers=providers,
+        console=null_console(),
+    )
+    assert code == 0
+    assert pointer(book).last_session_phase == "complete"
+    assert providers["openrouter"].calls == []  # no second draft
+    body = (book / "example-book/chapters/chapter-003.md").read_text()
+    assert split_chapter_file(body)[1] == split_chapter_file(drafted)[1]
+
+
+def test_editorial_pending_exits_two_and_leaves_canon_untouched(book) -> None:
+    before = canon_bytes(book)
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=full_providers(
+            openrouter=FakeProvider(Success(text_of(45), "m3", 60, 5, 100)),
+            gemini=FakeProvider(RateLimited("editor down")),
+            mistral=FakeProvider(RateLimited("editor down")),
+        ),
+        console=null_console(),
+    )
+    assert code == 2
+    assert canon_bytes(book) == before
+    assert pointer(book).last_session_phase == "editorial-pending"
+
+    fields, _ = split_chapter_file(
+        (book / "example-book/chapters/chapter-003.md").read_text(encoding="utf-8")
+    )
+    assert fields["status"] == "draft"  # drafted, not finished
+
+
+def test_critical_violation_refuses_the_whole_delta(book) -> None:
+    """Invariant 6 / decision #29, reached through the CLI this time."""
+    contradiction = editorial_delta(
+        3,
+        continuity_violations=[
+            {
+                "severity": "critical",
+                "violated_fact": "The spring-tide page carries two corrections.",
+                "chapter_excerpt": "nine corrections on the spring-tide page",
+                "explanation": "Contradicts a locked fact from ch-001.",
+            }
+        ],
+    )
+    before = canon_bytes(book)
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=drafting_and_editorial(contradiction),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 2
+    assert canon_bytes(book) == before
+    assert pointer(book).last_session_phase == "editorial-pending"
+    assert "contradicts locked canon" in console_out.getvalue()
+
+
+def test_editorial_disabled_completes_without_touching_canon(book) -> None:
+    pipeline_path = book / "example-book/config/pipeline.yaml"
+    pipeline_path.write_text(
+        pipeline_path.read_text().replace("enabled: true", "enabled: false")
+    )
+    before = canon_bytes(book)
+    providers = drafting_and_editorial()
+
+    code = run_session(
+        "example-book", book, FAKE_ENV, providers=providers, console=null_console()
+    )
+
+    assert code == 0
+    assert canon_bytes(book) == before
+    assert providers["gemini"].calls == []  # the editor was never asked
+    assert pointer(book).last_session_phase == "complete"
+    assert editorial_audits(book) == []
+
+
+def test_dry_run_on_a_drafted_chapter_assembles_nothing(book) -> None:
+    run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        providers=full_providers(
+            openrouter=FakeProvider(Success(text_of(45), "m3", 60, 5, 100)),
+        ),
+        console=null_console(),
+    )
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        resume=True,
+        dry_run=True,
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 0
+    assert "nothing to assemble" in console_out.getvalue()
+
+
+def test_pointer_disagreeing_with_disk_refuses(book) -> None:
+    park_at(book, "drafted")  # says drafted; chapter-003.md does not exist
+    console_out = io.StringIO()
+    code = run_session(
+        "example-book",
+        book,
+        FAKE_ENV,
+        resume=True,
+        providers=drafting_and_editorial(),
+        console=Console(file=console_out, force_terminal=False, width=200),
+    )
+    assert code == 1
+    assert "pointer disagrees with disk" in console_out.getvalue()

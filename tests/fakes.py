@@ -31,14 +31,44 @@ class FakeProvider(Provider):
 
 
 def full_providers(**named: FakeProvider) -> dict[str, FakeProvider]:
-    """Every provider the fixture routes mention; unrouted ones never fire
-    (the Router validates the whole chain up front)."""
+    """Every provider the fixture routes mention — drafting chain and
+    editor routes both, since Phase 6 runs them in one session. Unrouted
+    ones never fire (the Router validates the whole chain up front)."""
     providers = {
         name: FakeProvider(RateLimited("unused"))
-        for name in ("openrouter", "nvidia", "groq", "local")
+        for name in ("openrouter", "nvidia", "groq", "local", "gemini", "mistral")
     }
     providers.update(named)
     return providers
+
+
+def editorial_delta(chapter_number: int, **overrides) -> dict:
+    """A valid, clean delta for the fixture — nothing critical, so it
+    reconciles. Tests that want a refusal override `continuity_violations`."""
+    delta = {
+        "chapter_number": chapter_number,
+        "continuity_violations": [],
+        "new_locked_facts": [
+            {
+                "category": "character",
+                "entity": "ovist-rhoam",
+                "fact": "Ovist counts driftglass by weight.",
+                "source_chapter": chapter_number,
+            }
+        ],
+        "thread_updates": {
+            "opened": [{"text": "Someone reset the ebb ledge."}],
+            "progressed": [],
+            "resolved": [],
+        },
+        "chapter_summary": "Ovist walked the ledge and read the seal.",
+        "next_step_note": "Sela has not been told.",
+        "deepen_questions": ["Who issues the lead seals?"],
+        "suggested_canon_patches": [],
+        "beat_adherence": {"hit": True, "notes": "The beat lands."},
+    }
+    delta.update(overrides)
+    return delta
 
 
 def text_of(words: int, seed: str = "w") -> str:
