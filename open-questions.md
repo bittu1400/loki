@@ -415,11 +415,11 @@ example-book fixture gains a block so Batches 2–3 are testable.
 ## 🟠 OQ-10 — Can the editor model catch a continuity contradiction?
 
 **Numeric contradictions: ANSWERED 2026-09-01** (decisions #29, #30,
-#31). **Non-numeric contradictions: MEASURED 2026-09-04 — the answer is
-no, not unaided, and yes with a deterministic finding in the prompt.**
-The experiment this question asked for has been run; see "The name
-experiment" below. What remains is not a question about the models any
-more, it is a decision about how far the deterministic layer goes.
+#31). **Identity contradictions: MEASURED and CLOSED 2026-09-04** — the
+answer was "no, not unaided; yes with a deterministic finding", and the
+check that supplies that finding is built (decision #39, specs §17).
+**Dates, orderings, rewritten quantities and capabilities: still open,
+still untested by anything.** That remainder is now the whole question.
 
 **The case.** The original ch-005 (`git show
 d518b74:vault/example-book/chapters/chapter-005.md`) says "nine
@@ -521,11 +521,19 @@ was simply not there when it was wanted (pitfall C10's cousin). The
 comparison it would have provided is the one piece of this experiment
 still missing.
 
-**What is now a decision, not a question.** Extending the deterministic
-layer to entity/name disagreements — a sibling of specs §16 — is
-unbuilt, unplanned, and now evidenced. It is the author's call, and the
-honest framing is that until something like it exists, the pass catches
-number disagreements and nothing else that has been tested.
+**Decided and built the same session (decision #39, ADR-0012).**
+`quality/continuity_entities.py` (specs §17) now finds this class before
+the call and hands it over as evidence. Re-running the live pass with the
+generated finding: flash-lite reported it `critical`, quoted the
+sentence, named the fact, and stopped proposing the contradicted fact as
+new canon. Two classes are now covered by a deterministic pre-filter.
+
+**What is STILL open, and is the whole of OQ-10 now.** Dates, orderings,
+rewritten quantities ("a handful of corrections") and capabilities. No
+deterministic check sees them and the model has never been tested on
+them. The pattern is now established twice over — the model misses a
+class unaided and catches it with a finding in the prompt — which should
+raise, not lower, suspicion about every class where no finding exists.
 
 **Carried into the CLI (2026-09-04).** `write-session` now prints the
 violation list on every reconciled chapter, and prints the caveat with

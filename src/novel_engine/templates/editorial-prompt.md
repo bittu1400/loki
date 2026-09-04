@@ -48,6 +48,18 @@ continuity review, and it does not excuse you from the check below.
 
 {{number_findings}}
 
+## Entity checks — deterministic, already computed
+
+Names in the chapter compared against the names in the locked facts
+above. A finding here means a paragraph gives a locked fact's claim to a
+DIFFERENT person: report it as a `critical` continuity violation unless
+the chapter is plainly describing two people doing similar things. An
+empty result means only that no name it could match disagreed — it sees
+nothing said with a pronoun, and it does not excuse you from the check
+below.
+
+{{entity_findings}}
+
 ## The chapter
 
 {{chapter_text}}

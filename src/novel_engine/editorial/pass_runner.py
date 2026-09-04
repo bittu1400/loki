@@ -35,6 +35,10 @@ from novel_engine.core.outline import ChapterEntry
 from novel_engine.editorial.schema import EditorialDelta, parse_delta
 from novel_engine.providers.base import Outcome, Provider, Success
 from novel_engine.providers.router import AttemptCallback, Router
+from novel_engine.quality.continuity_entities import (
+    find_entity_conflicts,
+    render_entity_conflicts,
+)
 from novel_engine.quality.continuity_numbers import (
     find_number_conflicts,
     render_conflicts,
@@ -175,6 +179,9 @@ def build_editorial_prompt(
         "style_evidence": style_evidence(report),
         "number_findings": render_conflicts(
             find_number_conflicts(selected, chapter_body)
+        ),
+        "entity_findings": render_entity_conflicts(
+            find_entity_conflicts(selected, chapter_body, list(book.characters))
         ),
         "chapter_text": chapter_body.strip(),
     }

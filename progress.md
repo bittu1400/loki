@@ -23,7 +23,7 @@ row. Three exit codes: 0 complete, 1 nothing usable happened, 2
 `editorial-pending` (prose on disk, canon deliberately untouched,
 resumable with `--resume`).
 
-**325 tests pass, ruff clean.**
+**332 tests pass, ruff clean.**
 
 **What changed about OQ-01's blast radius.** Through Phase 5 the
 canon-writing code had no caller, so "do not run it against a real vault"
@@ -33,10 +33,15 @@ is `editorial.enabled: false` (decision #36), which drafts and completes
 without touching canon — safety bought by switching the continuity layer
 off, which is not a resolution.
 
-**OQ-10 is unchanged and still half-answered.** Bare number
-disagreements are caught. Names, dates, orderings, rewritten quantities
-and capabilities have never been tested. Every "no violations" line the
-CLI prints carries that caveat, deliberately.
+**OQ-10 narrowed twice this session.** Number disagreements were already
+covered; identity disagreements now are too, by the same mechanism — a
+deterministic check finds them before the call and hands them over
+(specs §16 and §17). Both were measured the same way: the model misses
+the class unaided and catches it with a finding in the prompt. **Dates,
+orderings, rewritten quantities and capabilities are still seen by
+nothing and tested by nobody**, and that pattern should raise suspicion
+about every class with no check behind it. Every "no violations" line
+the CLI prints carries the caveat, deliberately.
 
 Next: nothing in the phase plan. See the next-session section — the
 candidates are the OQ-10 experiment, OQ-01, and the first live run of the
@@ -63,8 +68,10 @@ wired pipeline.
 the whole specs §11 lifecycle for one chapter and every phase it reaches
 is on disk before the next one starts, so any interruption is resumable.
 The editorial pass and the reconciler have a caller for the first time.
+The session then ran OQ-10's name experiment and built the check it
+argued for (decision #39, ADR-0012, specs §17).
 
-**325 tests pass, ruff clean.**
+**332 tests pass, ruff clean.**
 
 ### Decisions taken before any code was written
 
@@ -190,6 +197,27 @@ this book. Pitfall A6 and pitfall A3 arriving in the same delta.
 
 **Nothing was reconciled and no canon was written** — the harness runs
 the pass and prints the delta; it never calls `reconcile`.
+
+### And then the check it argued for got built (decision #39, ADR-0012)
+
+`quality/continuity_entities.py`, a sibling of the number check, wired
+into the packaged prompt behind a new `{{entity_findings}}` slot.
+
+- **Paragraph-scoped**, because the planted case put the fact's wording
+  in one sentence and the wrong name in the next — sentence scoping
+  missed its own test case.
+- **Guard is proximity, not presence.** Suppressing any paragraph that
+  also names the fact's own character killed the true positive.
+  Presence-based matching gave one false positive on committed ch-002
+  ("which suited Brannec, who had been unseen at the Office for eleven
+  years" — the fact restated beside its own subject); proximity gives
+  zero across every committed chapter, which a test now pins.
+- **Live confirmation, with the generated finding rather than my
+  hand-written one:** flash-lite reported it `critical`, quoted the
+  sentence, named the fact — and stopped proposing the contradicted fact
+  as new canon, which runs 1 and 2 both did. That delta would now be
+  refused whole by decision #29, which is the correct outcome.
+- 332 tests pass (325 → 332), ruff clean.
 
 ### Not done, and deliberately
 
@@ -895,27 +923,35 @@ The manifest in the committed fixture has rows through 005; chapters 001
 through 005 exist. A live run needs a `planned` row — add one, or run
 with `--force` on an existing chapter and accept the confirmation prompt.
 
-### 2. The OQ-10 experiment — two calls, still the only untested class
+### 2. What is left of OQ-10 — dates, orderings, capabilities
 
-Unchanged from the last two sessions. Plant ONE non-numeric
-contradiction in a scratch copy of a fixture chapter — a name is cheapest
-to author and the hardest for a regex — and run both editors on it. It
-decides whether the answer is "the prompt was the problem" or "extend
-the deterministic layer to entity names next".
+The name experiment was run this session and the check it argued for is
+built (decision #39, specs §17). Two classes now have a deterministic
+pre-filter; the rest have nothing. The same experiment shape applies and
+costs the same two calls: plant ONE contradiction of a class no check
+sees — a date or an ordering is next cheapest to author — and run the
+editor on it, first without a finding and then with a simulated one.
 
-The pre-fix ch-005 with the numeric contradiction is still at:
+The prediction, on two data points, is that it misses unaided. If that
+holds a third time, the question stops being "can the model do it" and
+becomes "which classes are worth a check", which is a scoping decision
+rather than an experiment.
+
+Reproduce either existing case:
 
 ```bash
-git show d518b74:vault/example-book/chapters/chapter-005.md
+git show d518b74:vault/example-book/chapters/chapter-005.md   # the numeric one
 ```
 
-And the free half of that case needs no key at all:
+The identity one is one sentence, quoted verbatim in
+`tests/test_continuity_entities.py` as `PLANTED`.
+
+Both checks are free and need no key:
 
 ```python
 find_number_conflicts(parse_facts(tracker_text), chapter_body)
+find_entity_conflicts(facts, chapter_body, list(book.characters))
 ```
-
-one finding on the pre-fix ch-005, zero on every committed chapter.
 
 ### 3. OQ-01 — now blocking the main command, not a library
 
@@ -936,6 +972,11 @@ Session 10 it blocked modules nothing could invoke; now it blocks
 3. Non-blocking, open since Session 7: reasoning-on for the EDITORIAL
    pass has never been measured. Cheap and well-posed now that the pass
    has a caller (pitfalls C8/C9 are about drafting only).
+4. **mistral-medium has not answered since 2026-09-04.** Eight
+   consecutive 429s across ~10 minutes. It is the editorial fallback and
+   the only model that ever caught a contradiction unaided, so if it
+   stays dead that is a routing question, not a blip. Probe it with a
+   real call before trusting the lane (pitfall C10).
 
 ### Read first
 
@@ -991,8 +1032,13 @@ src/novel_engine/
   providers/*           # unchanged
   quality/metrics.py, style_checks.py   # unchanged
   quality/continuity_numbers.py  # find_number_conflicts(facts, body).
-                        #   Tuned false-positive guards — read the docstring
-                        #   and specs §16 before touching them
+                        #   Tuned guards — read the docstring and specs §16
+  quality/continuity_entities.py # find_entity_conflicts(facts, body, ids).
+                        #   Decision #39, specs §17. Paragraph-scoped;
+                        #   proximity guard. Both modules are pinned by
+                        #   tests asserting ZERO findings on every
+                        #   committed chapter — do not loosen either
+                        #   without re-running them
   editorial/schema.py   # EditorialDelta + parse_delta(). extra="forbid"
   editorial/pass_runner.py # build_editorial_prompt, run_editorial_pass,
                         #   repair loop. Returns data; writes nothing, ever
@@ -1004,7 +1050,7 @@ src/novel_engine/
 src/novel_engine/templates/book/            # packaged scaffolder source
 src/novel_engine/templates/editorial-prompt.md  # engine-owned (decision #26)
 vault/example-book/     # fixture, unchanged
-tests/                  # 22 files, 325 tests
+tests/                  # 23 files, 332 tests
 ```
 
 Entry points (`pyproject.toml`) are unchanged: `new-book`,
@@ -1020,9 +1066,11 @@ and a pointer to record itself against.
   canon now
 - Do not present the violation list as a guarantee anywhere in the CLI or
   the docs (OQ-10). Number disagreements are covered; nothing else is
-- Do not loosen `continuity_numbers`' false-positive guards without
-  re-running the test that asserts zero findings on every committed
-  chapter — both guards are tuned to failures that actually happened
+- Do not loosen the false-positive guards in `continuity_numbers` OR
+  `continuity_entities` without re-running the tests that assert zero
+  findings on every committed chapter. Every guard in both is tuned to a
+  failure that actually happened, and a check that cries wolf gets
+  ignored exactly when it is right
 - Do not add an override that lets a critical-violation delta reconcile
   (invariant 6, ADR-0009). If it must change, that is a new ADR
 - Do not make exit 2 mean anything other than "prose written, canon

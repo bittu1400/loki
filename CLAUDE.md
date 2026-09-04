@@ -169,8 +169,13 @@ ADR, never a shortcut. There are six.
   editor flagged "nine corrections" against a locked "two" AND proposed
   "the page carries nine corrections" as a new locked fact in the same
   delta. There is no override flag, deliberately.
-- **The number check runs before the editorial call** (decision #30,
-  `quality/continuity_numbers.py`). Quantities in the chapter against
+- **Two deterministic checks run before the editorial call** (decisions
+  #30 and #39, `quality/continuity_numbers.py` and
+  `quality/continuity_entities.py`). The second finds a locked fact's
+  claim given to a different NAME; its guard is proximity, not presence,
+  and it reads paragraphs because an identity claim spans sentences.
+  Both are pinned by tests asserting ZERO findings on every committed
+  chapter. The numeric one: Quantities in the chapter against
   quantities in the retrieved facts; findings go into the prompt as
   evidence. It is what made the primary editor catch the case it had
   missed twice unaided. Its false-positive guards are TUNED to measured
@@ -178,10 +183,14 @@ ADR, never a shortcut. There are six.
   that also states the canonical number is consistent. Do not loosen
   them without re-running the fixture check that asserts zero findings
   on every committed chapter.
-- **The editorial pass catches number disagreements and nothing proven
-  beyond that** (OQ-10). Names, dates, rewritten quantities and
-  capabilities have never been tested. Do not describe the pass as a
-  continuity guarantee.
+- **The editorial pass catches number and identity disagreements, and
+  nothing proven beyond that** (OQ-10). Both are caught because a
+  deterministic check finds them FIRST and hands them over
+  (`continuity_numbers.py` §16, `continuity_entities.py` §17) — measured
+  twice now, the model misses each class unaided and catches it with the
+  finding in the prompt. Dates, orderings, rewritten quantities and
+  capabilities have never been caught by anything. Do not describe the
+  pass as a continuity guarantee.
 - **`quality/` holds no numbers.** `metrics.py` measures and never judges;
   thresholds live in each book's `canon/style-guide.md` between
   `THRESHOLDS` markers. A book with no block gets metrics and no verdicts

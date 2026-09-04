@@ -850,3 +850,85 @@ lifecycle:
 - **Automatic resumption with no flag.** Rejected: bare re-runs would spend
   free-tier calls on a chapter the author may not remember starting. Daily
   caps are the hardest constraint in the project.
+
+---
+
+## ADR-0012 — The deterministic layer extends to entity disagreements
+
+**Date:** 2026-09-04 · **Status:** accepted · **Session:** 10
+
+### Context
+
+ADR-0008 established that continuity checking is not exclusively the
+model's job, and specs §16 implemented that for exactly one class: a bare
+number disagreement. Everything else was left to the editorial model, and
+OQ-10 recorded honestly that nothing else had been tested.
+
+The experiment OQ-10 asked for was run on 2026-09-04. One sentence was
+planted in a scratch copy of ch-005 contradicting a locked fact by
+identity, with no digit changed: *"Brannec Tull had kept it since before
+Ovist's clerkship"* against `[character:ovist-rhoam]` *Ovist Rhoam has
+kept the echo ledger for eleven years* — a fact retrieval puts in this
+chapter's prompt, one of only two it selects.
+
+| Run | Prompt | Result |
+|---|---|---|
+| 1 | packaged | 0 violations, and proposed the contradicted fact as NEW canon |
+| 2 | packaged | 0 violations, same re-proposal, plus a summary naming an office that does not exist |
+| 3 | packaged + one simulated entity finding | 1 `critical`, correctly quoted, no re-proposal |
+
+The instructions were identical in all three. The only variable that
+changed the outcome was evidence. `mistral-medium` — the one model that
+has ever caught a contradiction unaided — returned HTTP 429 on eight
+consecutive attempts and could not be measured.
+
+### Decision
+
+**`quality/continuity_entities.py` runs before the editorial call, beside
+the number check, and its findings go into the prompt as evidence.**
+
+1. It compares the **retrieved** facts against the chapter, so a finding
+   always points at something the prompt actually contains.
+2. It scans **paragraphs**, not sentences. An identity claim routinely
+   spans a full stop; sentence scoping missed the planted case.
+3. Its false-positive guard is **proximity, not presence**: the name the
+   fact's own wording sits nearest is the one the paragraph is making the
+   claim about.
+4. It measures and never judges (specs §14's rule). No exit code, no
+   gate, no threshold in the engine that is about prose.
+
+### Consequences
+
+- **Positive:** the class that was demonstrably invisible to the primary
+  editor is now handed to it as evidence, and the live re-run confirms
+  the catch with the generated finding rather than a hand-written one.
+- **Positive:** it also suppressed the model's habit of re-proposing the
+  contradicted fact as canon — which decision #29 could never have
+  refused, because nothing was reported as violated.
+- **Negative:** a second heuristic to keep tuned, with its own stoplist
+  and its own floor. Both are pinned by a test asserting zero findings on
+  every committed chapter.
+- **Negative:** it can only see names it can match to
+  `characters/index.yaml`. A book whose prose uses nicknames, titles, or
+  surnames absent from the index gets a quieter check without being told.
+- **Residual:** dates, orderings and capabilities remain unaddressed by
+  any deterministic layer and untested in the model. OQ-10 stays open for
+  exactly that, and no wording may imply otherwise.
+- **Residual:** the fallback editor was never measured on this case.
+
+### Alternatives considered
+
+- **Prompt wording alone.** Rejected on measurement, twice over: run 3
+  isolated the variable, and Session 8's run 2 showed a tightened prompt
+  producing a violation — the wrong one.
+- **Route editorial to a stronger model.** That is the #28 → #31 loop
+  already fought once. The stronger model is a fallback precisely because
+  it is a free tier that disappears, and on this very case it returned
+  429 on every attempt.
+- **Suppress any paragraph naming the fact's own character.** Tried
+  first; it killed the true positive, because denying someone a role
+  means naming them.
+- **Do nothing and keep OQ-10 open.** Rejected: the experiment had
+  already produced the evidence, and leaving a measured, cheap, quota-free
+  fix unbuilt while the pass silently missed the class is the failure
+  mode pitfall A6 describes.

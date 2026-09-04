@@ -893,13 +893,86 @@ explicitly — an empty result is evidence too, and the prompt states that
 it means only that no bare number disagreed.
 
 **Deliberately out of scope, permanently:** rewritten quantities ("a
-handful", "half a dozen"), numbers separated from their noun by more
-than one word, and every non-numeric contradiction — names, dates,
-orderings, capabilities. Those are OQ-10's remaining scope and belong to
-the model, or to a later deterministic layer.
+handful", "half a dozen"), and numbers separated from their noun by more
+than one word. Non-numeric contradictions are out of scope for THIS
+check; identity disagreements are §17's, and dates, orderings and
+capabilities still belong to the model alone (OQ-10).
 
 **Regression contract.** `tests/test_continuity_numbers.py` asserts
 exactly one finding on the pre-fix ch-005 (`git show d518b74:...`) and
 **zero on every committed chapter**, including the hand-corrected one. A
 loosened guard that starts crying wolf fails the suite rather than
 training the author to ignore findings.
+
+
+---
+
+## 17. Deterministic entity check — `quality/continuity_entities.py`
+
+Added 2026-09-04 (decision #39,
+[ADR-0012](adr.md#adr-0012--the-deterministic-layer-extends-to-entity-disagreements)).
+The second class a regex can find without judgement: a locked fact says
+**Ovist** has kept the echo ledger, a chapter paragraph says **Brannec**
+has. Same contract as §16 — measures, never judges, findings are
+evidence for the prompt and never a gate.
+
+**Why it exists.** OQ-10's name experiment, 2026-09-04:
+`gemini-3.5-flash-lite` missed exactly this contradiction **twice** at
+temperature 0.2, with the violated fact retrieved into the same prompt,
+and both times proposed the contradicted fact verbatim as a NEW locked
+fact. With one entity finding added — instructions unchanged — the same
+model on the same chapter reported it as `critical`, quoted the
+sentence, named the fact, and stopped proposing it as canon. The lever
+was evidence, not prompt wording.
+
+**Inputs:** the locked facts already **retrieved** for this chapter, the
+chapter body, and the character ids from `characters/index.yaml`.
+
+**Algorithm**
+
+1. A character is "named" in a span when any part of its kebab-case id
+   longer than two letters appears as a word. `ovist-rhoam` matches
+   *Ovist* or *Rhoam*; a possessive matches on the bare token.
+2. Each retrieved fact that names a character (or carries a
+   `character:<id>` category) contributes its distinctive words — four
+   or more letters, minus §16's stoplist, minus every character-name
+   token in the book.
+3. For each **paragraph** of the chapter's prose, report a conflict when
+   the paragraph names a character the fact does not, and shares at
+   least `MIN_SHARED_WORDS` (3) distinctive words with that fact —
+   subject to the guard below.
+
+**Why paragraphs, not sentences.** The planted case put the fact's noun
+phrase in one sentence ("The echo ledger itself had never been his.")
+and the wrong name in the next ("Brannec Tull had kept it..."). Sentence
+scoping missed its own test case; an identity claim routinely spans a
+full stop, where a quantity rarely does.
+
+**False-positive guard: proximity, not presence.** Suppressing every
+paragraph that also names the fact's own character was tried first and
+killed the true positive — denying someone a role usually means naming
+them, so that paragraph names both. What separates the cases is which
+name the fact's own wording sits nearest. Measured on the committed
+fixture: ch-002's "which suited Brannec, who had been unseen at the
+Office for eleven years" restates Brannec's own fact beside his own name
+(suppressed), while the planted "Brannec Tull had kept it" puts the same
+wording beside the wrong name (reported). Presence alone produced one
+false positive on the committed fixture; proximity produces zero.
+
+**Output.** `EntityConflict(fact_character, chapter_character,
+fact_text, chapter_sentence, shared_words)`, rendered into the
+`{{entity_findings}}` slot of the packaged editorial prompt. When there
+are none the slot says so explicitly, and says what it did not check.
+
+**Deliberately out of scope, permanently:** pronoun-only substitutions
+("he had kept it"), roles described without a name, and any character
+absent from `characters/index.yaml`. Dates, orderings and capabilities
+remain unaddressed by any deterministic layer — the pass is still
+unproven there (OQ-10), and no wording anywhere may imply otherwise.
+
+**Regression contract.** `tests/test_continuity_entities.py` asserts a
+finding on the planted identity contradiction and **zero findings on
+every committed fixture chapter**. Both guards are tuned to measured
+outcomes; loosening either without re-running that test is how the check
+starts crying wolf, and a check that cries wolf gets ignored exactly
+when it is right.
