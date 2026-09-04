@@ -415,10 +415,11 @@ example-book fixture gains a block so Batches 2–3 are testable.
 ## 🟠 OQ-10 — Can the editor model catch a continuity contradiction?
 
 **Numeric contradictions: ANSWERED 2026-09-01** (decisions #29, #30,
-#31). **Non-numeric contradictions: still open, still untested.**
-Downgraded from 🔴 to 🟠: it no longer blocks trusting the pass on the
-class we have evidence for, but it does block claiming the pass catches
-contradictions in general.
+#31). **Non-numeric contradictions: MEASURED 2026-09-04 — the answer is
+no, not unaided, and yes with a deterministic finding in the prompt.**
+The experiment this question asked for has been run; see "The name
+experiment" below. What remains is not a question about the models any
+more, it is a decision about how far the deterministic layer goes.
 
 **The case.** The original ch-005 (`git show
 d518b74:vault/example-book/chapters/chapter-005.md`) says "nine
@@ -467,6 +468,64 @@ copy of a fixture chapter — a name is cheapest to author and the hardest
 for a regex — and run both editors on it. Two calls, one session, and it
 decides whether the answer is "the model is fine, the prompt was the
 problem" or "extend the deterministic layer to entity names next".
+
+### The name experiment — run 2026-09-04
+
+**Setup.** One sentence added to a scratch copy of ch-005, contradicting
+a locked fact by **identity**, with no digit touched:
+
+> The echo ledger itself had never been his. Brannec Tull had kept it
+> since before Ovist's clerkship, and Ovist had never once been trusted
+> to write in it.
+
+against `[character:ovist-rhoam]` `[ch-001]` `[author]` *Ovist Rhoam has
+kept the echo ledger for eleven years* — which retrieval puts in the
+prompt (it is one of only **two** facts selected for this chapter).
+`find_number_conflicts` reports nothing, as designed: no quantity
+disagrees, so the deterministic layer is blind to it by construction.
+
+| Run | Editor | Prompt | Violations | Also did |
+|---|---|---|---|---|
+| 1 | gemini flash-lite | packaged | **0 — missed** | proposed the contradicted fact, verbatim, as a NEW locked fact |
+| 2 | gemini flash-lite | packaged | **0 — missed** | same again; and its summary relocated the scene to the "Vhal Mirek Office", a place that does not exist |
+| 3 | gemini flash-lite | packaged + a simulated ENTITY finding | **1, `critical`** — quoted the sentence, named the fact | proposed two reasonable facts, neither of them the contradicted one |
+| — | mistral-medium | packaged | **not obtained** | HTTP 429 `Rate limit exceeded` on every attempt across ~10 minutes and 8+ router retries |
+
+**What this settles.**
+
+- The miss is **stable, not sampling noise** — two identical runs at
+  temperature 0.2.
+- It is **not a prompt-wording problem**. Run 3 changed nothing about the
+  instructions; it added one block of evidence in the shape ADR-0008
+  already established for numbers, and the same model on the same chapter
+  went from `[]` to a correctly-quoted `critical` violation.
+- So the answer to "prompt, or deterministic layer?" is
+  **deterministic layer**, on the same evidence pattern that settled the
+  numeric case.
+
+**A sharper finding than "it missed".** In both unaided runs the model
+proposed *the very fact the chapter contradicts* as a new locked fact —
+`Ovist Rhoam has kept the echo ledger for eleven years` — while the
+chapter three paragraphs below said someone else kept it. It reproduced
+the fact it was supposed to check against, as confirmation. Decision
+#29's refusal cannot fire here, because nothing was reported as
+violated: the reconciler would have appended a duplicate of the
+contradicted fact, plus (run 2) a summary naming an office that does not
+exist. That is pitfall A6 and pitfall A3 arriving together.
+
+**The fallback lane was unreachable.** mistral-medium — the only model
+that has ever caught a contradiction unaided (run 4, 2026-09-01) —
+returned 429 on every attempt. That is worth recording on its own: the
+lane the routing depends on for the unaided catch is a free tier that
+was simply not there when it was wanted (pitfall C10's cousin). The
+comparison it would have provided is the one piece of this experiment
+still missing.
+
+**What is now a decision, not a question.** Extending the deterministic
+layer to entity/name disagreements — a sibling of specs §16 — is
+unbuilt, unplanned, and now evidenced. It is the author's call, and the
+honest framing is that until something like it exists, the pass catches
+number disagreements and nothing else that has been tested.
 
 **Carried into the CLI (2026-09-04).** `write-session` now prints the
 violation list on every reconciled chapter, and prints the caveat with

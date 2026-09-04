@@ -149,6 +149,48 @@ session left the previous chapter's note standing over the next one.
       This proves the plumbing and the exit contract, not model
       behaviour — the keys were junk and every route returned 400.
 
+### The OQ-10 name experiment — run this session
+
+The two-call experiment that has been sitting in the next-session brief
+since Session 8. It took four calls and it answered the question.
+
+**Setup.** A scratch copy of the fixture (deleted afterwards; the
+committed fixture was never touched). One sentence added to ch-005
+contradicting a locked fact by identity, no digit changed:
+
+> The echo ledger itself had never been his. Brannec Tull had kept it
+> since before Ovist's clerkship, and Ovist had never once been trusted
+> to write in it.
+
+against `[character:ovist-rhoam]` *Ovist Rhoam has kept the echo ledger
+for eleven years* — one of only two facts retrieval puts in this
+chapter's prompt. `find_number_conflicts` reports nothing, by
+construction.
+
+**Results.** flash-lite missed it **twice** (0 violations, temperature
+0.2, identical outcome). A third run, with one block of simulated
+ENTITY-check evidence appended in exactly the shape ADR-0008 uses for
+numbers, caught it as `critical`, quoted the sentence and named the
+fact — first call, no repairs, 554 output tokens. mistral-medium never
+answered: HTTP 429 on every attempt across ~10 minutes.
+
+**So the branch OQ-10 posed is decided by measurement:** it is not the
+prompt wording, it is the evidence. The same model, the same
+instructions, the same chapter — the only variable that changed the
+outcome was a deterministic finding handed to it.
+
+**The finding I did not expect.** In both unaided runs the model
+proposed *the fact the chapter contradicts*, verbatim, as a NEW locked
+fact. It echoed the fact it was supposed to check against, as
+confirmation. Decision #29's refusal cannot fire on that, because
+nothing is reported as violated — the reconciler would have appended a
+duplicate of the contradicted fact and, in run 2, a summary that moved
+the scene to the "Vhal Mirek Office", a place that does not exist in
+this book. Pitfall A6 and pitfall A3 arriving in the same delta.
+
+**Nothing was reconciled and no canon was written** — the harness runs
+the pass and prints the delta; it never calls `reconcile`.
+
 ### Not done, and deliberately
 
 - **No live API run with working keys.** The smoke run above reached real
@@ -157,9 +199,13 @@ session left the previous chapter's note standing over the next one.
   Session 8's five runs, and those went through a throwaway script rather
   than `write-session`. A chapter has never been drafted AND reconciled by
   the wired command.
-- **The OQ-10 non-numeric experiment is still not run.** It costs two
-  calls and nothing depends on it, but it is still the only untested
-  contradiction class.
+- **The OQ-10 experiment is now run** (above), so what is left of that
+  question is a decision rather than an experiment: whether to build a
+  deterministic entity/name check as a sibling of specs §16. Unbuilt,
+  unplanned, and now evidenced.
+- **mistral-medium was never reached.** The comparison run against the
+  one model that has caught a contradiction unaided is still missing,
+  because the free tier returned 429 throughout.
 
 ---
 

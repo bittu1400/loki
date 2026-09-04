@@ -115,6 +115,17 @@ caught the same case on both subsequent runs. Never describe the
 violation list as a guarantee; it is proven for bare number
 disagreements and unproven for everything else (OQ-10).
 
+**Measured again, on a different class (2026-09-04).** OQ-10's name
+experiment: one sentence in ch-005 saying Brannec Tull kept the echo
+ledger, against the locked fact that Ovist has kept it for eleven years,
+that fact in the same prompt. `gemini-3.5-flash-lite` returned `[]`
+**twice** — and both times proposed the contradicted fact, word for word,
+as a NEW locked fact. It echoed the fact it was meant to check against.
+A third run with a simulated entity finding in the prompt caught it as
+`critical` on the first call. The empty list was an evidence gap, not a
+prompt-wording problem, and the number check cannot see this class at
+all.
+
 **Where that lands in the product (2026-09-04).** `write-session` prints
 the caveat next to every result, including the empty one: "none
 reported... an empty list is not proof of a clean chapter". The wording
